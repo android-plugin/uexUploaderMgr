@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="3.0.3" build = "3">
-        <info>3:替换插件中引擎包及新增必要资源文件</info>
+    <plugin uexName="uexUploaderMgr" version="3.0.4" build = "4">
+        <info>4:修复不支持HTTPS问题</info>
+        <build>3:替换插件中引擎包及新增必要资源文件</build>
         <build>2:新增setHeaders方法</build>
         <build>1:修改UPLOAD上传慢问题</build>
         <build>0:上传功能插件</build>
