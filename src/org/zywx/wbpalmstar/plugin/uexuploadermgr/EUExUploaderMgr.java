@@ -19,11 +19,16 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.net.ssl.HttpsURLConnection;
+
 import org.json.JSONObject;
 import org.zywx.wbpalmstar.base.BUtility;
 import org.zywx.wbpalmstar.engine.EBrowserView;
 import org.zywx.wbpalmstar.engine.universalex.EUExBase;
 import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
+import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
+import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
+import org.zywx.wbpalmstar.platform.certificates.Http;
 
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
@@ -55,6 +60,9 @@ public class EUExUploaderMgr extends EUExBase {
     private static final String TAG_PARAMS_DATA = "data";
     private HashMap<Integer, EUExFormFile> objectMap;
     private HashMap<String, String> mHttpHead;
+	private String mCertPassword = "";
+	private String mCertPath = "";
+	private boolean mHasCert = false;
 
     public EUExUploaderMgr(Context context, EBrowserView inParent) {
         super(context, inParent);
@@ -91,7 +99,8 @@ public class EUExUploaderMgr extends EUExBase {
             return;
         }
         if (inTargetAddress == null || inTargetAddress.length() == 0
-                || !inTargetAddress.startsWith(BUtility.F_HTTP_PATH)) {
+                || !(inTargetAddress.startsWith(BUtility.F_HTTP_PATH)
+                	|| inTargetAddress.startsWith("https://"))) {
             jsCallback(F_CALLBACK_NAME_CREATEUPLOADER,
                     Integer.parseInt(inOpCode), EUExCallback.F_C_INT,
                     EUExCallback.F_C_FAILED);
@@ -319,7 +328,22 @@ public class EUExUploaderMgr extends EUExBase {
                 String CONTENT_TYPE = "multipart/form-data"; // 内容类型
 
                 URL url = new URL(formFile.getM_targetAddress());
-                conn = (HttpURLConnection) url.openConnection();
+				if (formFile.getM_targetAddress().startsWith(
+						BUtility.F_HTTP_PATH)) {
+					conn = (HttpURLConnection) url.openConnection();
+				} else {
+					conn = (HttpsURLConnection) url.openConnection();
+					javax.net.ssl.SSLSocketFactory ssFact = null;
+					if (mHasCert) {
+						ssFact = Http.getSSLSocketFactoryWithCert(mCertPassword,
+								mCertPath, mContext);
+					} else {
+						ssFact = new HNetSSLSocketFactory(null, null);
+					}
+					((HttpsURLConnection) conn).setSSLSocketFactory(ssFact);
+					((HttpsURLConnection) conn)
+							.setHostnameVerifier(new HX509HostnameVerifier());
+				}
                 String cookie = getCookie(formFile.getM_targetAddress());
                 if (null != cookie) {
                     conn.setRequestProperty("Cookie", cookie);
