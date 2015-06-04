@@ -610,12 +610,16 @@ public class EUExUploaderMgr extends EUExBase {
                 int srcWidth = source.getWidth();
                 int srcHeight = source.getHeight();
                 final float sacleRate = max / (float) srcWidth;
-                final int destWidth = (int) (srcWidth * sacleRate);
-                final int destHeight = (int) (srcHeight * sacleRate);
-                dstbmp = Bitmap.createScaledBitmap(source, destWidth,
-                        destHeight, false);
-                if (source != null && !source.isRecycled()) {
-                    source.recycle();
+                if (sacleRate != 1) {
+                	final int destWidth = (int) (srcWidth * sacleRate);
+                	final int destHeight = (int) (srcHeight * sacleRate);
+                	dstbmp = Bitmap.createScaledBitmap(source, destWidth,
+                			destHeight, false);
+                	if (source != null && !source.isRecycled()) {
+                		source.recycle();
+                	}
+                } else {
+                	dstbmp = source;
                 }
                 if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
                     if (dstbmp != null && !dstbmp.isRecycled()) {
