@@ -11,6 +11,8 @@ import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.text.DecimalFormat;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -29,6 +31,7 @@ import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
 import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
 import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
 import org.zywx.wbpalmstar.platform.certificates.Http;
+import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
 
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
@@ -42,9 +45,12 @@ import android.text.TextUtils;
 
 public class EUExUploaderMgr extends EUExBase {
 
-    public static final String tag = "uexUploaderMgr_";
-    private static final String F_CALLBACK_NAME_UPLOADSTATUS = "uexUploaderMgr.onStatus";
-    private static final String F_CALLBACK_NAME_CREATEUPLOADER = "uexUploaderMgr.cbCreateUploader";
+	public final static String KEY_APPVERIFY = "appverify";
+	private WWidgetData mCurWData;
+
+	public static final String tag = "uexUploaderMgr_";
+	private static final String F_CALLBACK_NAME_UPLOADSTATUS = "uexUploaderMgr.onStatus";
+	private static final String F_CALLBACK_NAME_CREATEUPLOADER = "uexUploaderMgr.cbCreateUploader";
 
     public static final int F_FILE_TYPE_CREATE = 0;
     public static final int F_FILE_TYPE_UPLOAD = 1;
@@ -64,11 +70,12 @@ public class EUExUploaderMgr extends EUExBase {
 	private String mCertPath = "";
 	private boolean mHasCert = false;
 
-    public EUExUploaderMgr(Context context, EBrowserView inParent) {
-        super(context, inParent);
-        objectMap = new HashMap<Integer, EUExFormFile>();
-        mHttpHead = new HashMap<String, String>();
-    }
+	public EUExUploaderMgr(Context context, EBrowserView inParent) {
+		super(context, inParent);
+		objectMap = new HashMap<Integer, EUExFormFile>();
+		mHttpHead = new HashMap<String, String>();
+		mCurWData = inParent.getCurrentWidget();
+	}
 
     public void createUploader(String[] parm) {
         if(parm == null || parm.length < 2){
@@ -344,34 +351,41 @@ public class EUExUploaderMgr extends EUExBase {
 					((HttpsURLConnection) conn)
 							.setHostnameVerifier(new HX509HostnameVerifier());
 				}
-                String cookie = getCookie(formFile.getM_targetAddress());
-                if (null != cookie) {
-                    conn.setRequestProperty("Cookie", cookie);
-                }
-                conn.setReadTimeout(TIME_OUT);
-                conn.setConnectTimeout(TIME_OUT);
-                conn.setDoInput(true); // 允许输入流
-                conn.setDoOutput(true); // 允许输出流
-                conn.setUseCaches(false); // 不允许使用缓存
-                conn.setRequestMethod("POST"); // 请求方式
-                conn.setRequestProperty("Charset", CHARSET); // 设置编码
-                conn.setRequestProperty("connection", "keep-alive");
-                conn.setRequestProperty("Content-Type", CONTENT_TYPE
-                        + ";boundary=" + BOUNDARY);
-                addHeaders(conn);
-                /**
-                 * 当文件不为空，把文件包装并且上传
-                 */
-                DataOutputStream dos = new DataOutputStream(
-                        conn.getOutputStream());
-                StringBuffer sb = new StringBuffer();
-                sb.append(PREFIX);
-                sb.append(BOUNDARY);
-                sb.append(LINE_END);
-                /**
-                 * 这里重点注意： name里面的值为服务器端需要key 只有这个key 才可以得到对应的文件
-                 * filename是文件的名字，包含后缀名的 比如:abc.png
-                 */
+				String cookie = getCookie(formFile.getM_targetAddress());
+				if (null != cookie) {
+					conn.setRequestProperty("Cookie", cookie);
+				}
+				if (null != mCurWData) {
+					conn.setRequestProperty(
+							KEY_APPVERIFY,
+							getAppVerifyValue(mCurWData,
+									System.currentTimeMillis()));
+				}
+
+				conn.setReadTimeout(TIME_OUT);
+				conn.setConnectTimeout(TIME_OUT);
+				conn.setDoInput(true); // 允许输入流
+				conn.setDoOutput(true); // 允许输出流
+				conn.setUseCaches(false); // 不允许使用缓存
+				conn.setRequestMethod("POST"); // 请求方式
+				conn.setRequestProperty("Charset", CHARSET); // 设置编码
+				conn.setRequestProperty("connection", "keep-alive");
+				conn.setRequestProperty("Content-Type", CONTENT_TYPE
+						+ ";boundary=" + BOUNDARY);
+				addHeaders(conn);
+				/**
+				 * 当文件不为空，把文件包装并且上传
+				 */
+				DataOutputStream dos = new DataOutputStream(
+						conn.getOutputStream());
+				StringBuffer sb = new StringBuffer();
+				sb.append(PREFIX);
+				sb.append(BOUNDARY);
+				sb.append(LINE_END);
+				/**
+				 * 这里重点注意： name里面的值为服务器端需要key 只有这个key 才可以得到对应的文件
+				 * filename是文件的名字，包含后缀名的 比如:abc.png
+				 */
 
                 sb.append("Content-Disposition: form-data; name=\""
                         + inInputName + "\"; filename=\"" + formFile.m_filname
@@ -652,24 +666,76 @@ public class EUExUploaderMgr extends EUExBase {
 
     }
 
-    @Override
-    public void onHandleMessage(Message msg) {
-        if(msg == null){
-            return;
-        }
-        String[] params = msg.getData().getStringArray(TAG_PARAMS_DATA);
-        switch (msg.what) {
-        case TAG_MSG_CREATE:
-            createUploaderMsg(params);
-            break;
-        case TAG_MSG_UPLOAD:
-            uploadFileMsg(params);
-            break;
-        case TAG_MSG_CLOSE:
-            closeUploaderMsg(params);
-        default:
-            break;
-        }
-    }
-    
+	@Override
+	public void onHandleMessage(Message msg) {
+		if (msg == null) {
+			return;
+		}
+		String[] params = msg.getData().getStringArray(TAG_PARAMS_DATA);
+		switch (msg.what) {
+		case TAG_MSG_CREATE:
+			createUploaderMsg(params);
+			break;
+		case TAG_MSG_UPLOAD:
+			uploadFileMsg(params);
+			break;
+		case TAG_MSG_CLOSE:
+			closeUploaderMsg(params);
+		default:
+			break;
+		}
+	}
+
+	/**
+	 * 添加app验证Header
+	 * 
+	 * @param curWData
+	 */
+	private void setAppVerifyHeader(WWidgetData curWData) {
+		mHttpHead.put(KEY_APPVERIFY,
+				getAppVerifyValue(curWData, System.currentTimeMillis()));
+	};
+
+	/**
+	 * 添加验证头
+	 * 
+	 * @param curWData
+	 *            当前widgetData
+	 * @param timeStamp
+	 *            当前时间戳
+	 * @return
+	 */
+	private String getAppVerifyValue(WWidgetData curWData, long timeStamp) {
+		String value = null;
+		String md5 = getMD5Code(curWData.m_appId + ":" + curWData.m_appkey
+				+ ":" + timeStamp);
+		value = "md5=" + md5 + ";ts=" + timeStamp;
+		return value;
+
+	}
+
+	private String getMD5Code(String value) {
+		if (value == null) {
+			value = "";
+		}
+		try {
+			MessageDigest md = MessageDigest.getInstance("MD5");
+			md.reset();
+			md.update(value.getBytes());
+			byte[] md5Bytes = md.digest();
+			StringBuffer hexValue = new StringBuffer();
+			for (int i = 0; i < md5Bytes.length; i++) {
+				int val = ((int) md5Bytes[i]) & 0xff;
+				if (val < 16)
+					hexValue.append("0");
+				hexValue.append(Integer.toHexString(val));
+			}
+			return hexValue.toString();
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
+
+		return null;
+	}
+
 }
