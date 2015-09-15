@@ -42,10 +42,12 @@ import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Message;
 import android.text.TextUtils;
+import android.util.Log;
 
 public class EUExUploaderMgr extends EUExBase {
 
 	public final static String KEY_APPVERIFY = "appverify";
+	public final static String XMAS_APPID = "x-mas-app-id";
 	private WWidgetData mCurWData;
 
 	public static final String tag = "uexUploaderMgr_";
@@ -74,7 +76,7 @@ public class EUExUploaderMgr extends EUExBase {
 		super(context, inParent);
 		objectMap = new HashMap<Integer, EUExFormFile>();
 		mHttpHead = new HashMap<String, String>();
-		mCurWData = inParent.getCurrentWidget();
+		mCurWData = getWidgetData(inParent);
 	}
 
     public void createUploader(String[] parm) {
@@ -355,12 +357,8 @@ public class EUExUploaderMgr extends EUExBase {
                 if (null != cookie) {
                     conn.setRequestProperty("Cookie", cookie);
                 }
-				if (null != mCurWData) {
-					conn.setRequestProperty(
-							KEY_APPVERIFY,
-							getAppVerifyValue(mCurWData,
-									System.currentTimeMillis()));
-				}
+				
+
                 conn.setReadTimeout(TIME_OUT);
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
@@ -372,7 +370,15 @@ public class EUExUploaderMgr extends EUExBase {
                 conn.setRequestProperty("Content-Type", CONTENT_TYPE
                         + ";boundary=" + BOUNDARY);
                 addHeaders(conn);
-                /**
+				
+				if (null != mCurWData) {
+					conn.setRequestProperty(
+							KEY_APPVERIFY,
+							getAppVerifyValue(mCurWData,
+									System.currentTimeMillis()));
+					conn.setRequestProperty(XMAS_APPID,mCurWData.m_appId);
+				}
+				/**
                  * 当文件不为空，把文件包装并且上传
                  */
                 DataOutputStream dos = new DataOutputStream(
@@ -725,6 +731,20 @@ public class EUExUploaderMgr extends EUExBase {
 		}
 
 		return null;
+	}
+	/**
+	 * plugin里面的子应用的appId和appkey都按照主应用为准
+	 */
+	private WWidgetData getWidgetData(EBrowserView view){
+		WWidgetData widgetData = view.getCurrentWidget();
+		String indexUrl=widgetData.m_indexUrl;
+		Log.i("uexUploaderMgr", "m_indexUrl:"+indexUrl);
+		if(widgetData.m_wgtType!=0){
+			if(indexUrl.contains("widget/plugin")){
+				return view.getRootWidget();
+			}
+		}
+		return widgetData;
 	}
 
 }
