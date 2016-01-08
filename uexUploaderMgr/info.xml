@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="3.0.7" build = "7">
-        <info>7：增加新的 header以及plugin里面的子应用的appId和appkey都按照主应用为准</info>
+    <plugin uexName="uexUploaderMgr" version="3.0.8" build = "8">
+        <info>8：修正plugin文件错误,导致uexFileMgr的plugin方法被覆盖的问题</info>
+        <build>7：增加新的 header以及plugin里面的子应用的appId和appkey都按照主应用为准</build>
         <build>6:增加appVerify校验头</build>
         <build>5:修复个别图片压缩导致的上传失败问题</build>
         <build>4:修复不支持HTTPS问题</build>
