@@ -1,5 +1,6 @@
 package org.zywx.wbpalmstar.plugin.uexuploadermgr;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -8,6 +9,7 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -71,6 +73,7 @@ public class EUExUploaderMgr extends EUExBase {
 	private String mCertPassword = "";
 	private String mCertPath = "";
 	private boolean mHasCert = false;
+    private String lastPercenttage = "";
 
 	public EUExUploaderMgr(Context context, EBrowserView inParent) {
 		super(context, inParent);
@@ -313,7 +316,7 @@ public class EUExUploaderMgr extends EUExBase {
     private String Uploader(EUExFormFile formFile,
             UploadPercentage uploadPercentage, int inOpCode, String inInputName) {
 
-        InputStream is = null;
+        InputStream fileIs = null;
         DataOutputStream outStream = null;
         HttpURLConnection conn = null;
 
@@ -399,15 +402,15 @@ public class EUExUploaderMgr extends EUExBase {
                         + CHARSET + LINE_END);
                 sb.append(LINE_END);
                 dos.write(sb.toString().getBytes());
-                is = formFile.m_inputStream;
+                fileIs = formFile.m_inputStream;
                 // int l;
                 int upload = 0;
-                int fileSize = is.available();
+                int fileSize = fileIs.available();
                 uploadPercentage.setFileSize(fileSize, inOpCode);
                 byte[] bytes = new byte[4096];
                 int len = 0;
                 try {
-                    while ((len = is.read(bytes)) != -1) {
+                    while ((len = fileIs.read(bytes)) != -1) {
                         dos.write(bytes, 0, len);
                         upload += len;
                         uploadPercentage.sendMessage(upload);
@@ -428,7 +431,6 @@ public class EUExUploaderMgr extends EUExBase {
                 dos.write(end_data);
 
                 int res = conn.getResponseCode();
-
                 if (res == 200) {
                     String js = SCRIPT_HEADER + "if("
                             + F_CALLBACK_NAME_UPLOADSTATUS + "){"
@@ -436,17 +438,19 @@ public class EUExUploaderMgr extends EUExBase {
                             + "," + uploadPercentage.fileSize + "," + 100 + ","
                             + "null," + EUExCallback.F_C_UpLoading + ")}";
                     onCallback(js);
-                    is = conn.getInputStream();
-                    int ch;
-                    StringBuilder b = new StringBuilder();
-                    while ((ch = is.read()) != -1) {
-                        b.append((char) ch);
+                    InputStreamReader isReader = new InputStreamReader(  
+                            conn.getInputStream(),CHARSET);
+                    BufferedReader bufReader = new BufferedReader(isReader);
+                    StringBuffer buffer = new StringBuffer();
+                    String line = " ";
+                    while ((line = bufReader.readLine()) != null){
+                        buffer.append(line);
                     }
 
                     js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
                             + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "("
                             + inOpCode + "," + uploadPercentage.fileSize + ","
-                            + 100 + ",'" + BUtility.transcoding(b.toString())
+                            + 100 + ",'" + buffer.toString()
                             + "'," + EUExCallback.F_C_FinishUpLoad + ")}";
                     onCallback(js);
 
@@ -459,7 +463,7 @@ public class EUExUploaderMgr extends EUExBase {
                     onCallback(js);
                 }
 
-                is.close();
+                fileIs.close();
                 dos.flush();
                 dos.close();
                 formFile.m_isUpLoaded = true;
@@ -482,8 +486,8 @@ public class EUExUploaderMgr extends EUExBase {
         } finally {
 
             try {
-                if (is != null) {
-                    is.close();
+                if (fileIs != null) {
+                    fileIs.close();
                 }
                 if (outStream != null) {
                     outStream.close();
@@ -494,14 +498,14 @@ public class EUExUploaderMgr extends EUExBase {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            is = null;
+            fileIs = null;
             outStream = null;
             conn = null;
         }
 
         return null;
     }
-
+    
     private void addHeaders(HttpURLConnection mConnection) {
         if (null != mConnection) {
             Set<Entry<String, String>> entrys = mHttpHead.entrySet();
@@ -524,7 +528,7 @@ public class EUExUploaderMgr extends EUExBase {
             df.setMinimumFractionDigits(0);
             opCode = inOpCode;
         }
-
+        
         public void sendMessage(int msg) {
             String percentage = "0";
             if (fileSize * 100 < 0) {
@@ -532,12 +536,15 @@ public class EUExUploaderMgr extends EUExBase {
             } else {
                 percentage = df.format(msg * 100 / fileSize);
             }
-
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + opCode + ","
-                    + fileSize + "," + percentage + "," + "null,"
-                    + EUExCallback.F_C_UpLoading + ")}";
-            onCallback(js);
+            if(!percentage.equals(lastPercenttage)
+                    || TextUtils.isEmpty(lastPercenttage))
+            {
+                String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
+                        + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + opCode + ","
+                        + fileSize + "," + percentage + "," + "null,"
+                        + EUExCallback.F_C_UpLoading + ")}";
+                onCallback(js);
+            }
 
         }
     }
