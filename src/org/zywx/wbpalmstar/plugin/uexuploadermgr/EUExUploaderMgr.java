@@ -1,26 +1,5 @@
 package org.zywx.wbpalmstar.plugin.uexuploadermgr;
 
-import android.content.Context;
-import android.content.res.AssetFileDescriptor;
-import android.graphics.Bitmap;
-import android.graphics.Bitmap.CompressFormat;
-import android.graphics.Bitmap.Config;
-import android.graphics.BitmapFactory;
-import android.os.Bundle;
-import android.os.Message;
-import android.text.TextUtils;
-import android.util.Log;
-
-import org.json.JSONObject;
-import org.zywx.wbpalmstar.base.BUtility;
-import org.zywx.wbpalmstar.engine.EBrowserView;
-import org.zywx.wbpalmstar.engine.universalex.EUExBase;
-import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
-import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
-import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
-import org.zywx.wbpalmstar.platform.certificates.Http;
-import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
-
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -45,6 +24,27 @@ import java.util.Set;
 import java.util.UUID;
 
 import javax.net.ssl.HttpsURLConnection;
+
+import org.json.JSONObject;
+import org.zywx.wbpalmstar.base.BUtility;
+import org.zywx.wbpalmstar.engine.EBrowserView;
+import org.zywx.wbpalmstar.engine.universalex.EUExBase;
+import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
+import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
+import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
+import org.zywx.wbpalmstar.platform.certificates.Http;
+import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
+
+import android.content.Context;
+import android.content.res.AssetFileDescriptor;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.CompressFormat;
+import android.graphics.Bitmap.Config;
+import android.graphics.BitmapFactory;
+import android.os.Bundle;
+import android.os.Message;
+import android.text.TextUtils;
+import android.util.Log;
 
 public class EUExUploaderMgr extends EUExBase {
 
@@ -367,6 +367,7 @@ public class EUExUploaderMgr extends EUExBase {
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
                 conn.setDoOutput(true); // 允许输出流
+                conn.setChunkedStreamingMode(4096);
                 conn.setUseCaches(false); // 不允许使用缓存
                 conn.setRequestMethod("POST"); // 请求方式
                 conn.setRequestProperty("Charset", CHARSET); // 设置编码
