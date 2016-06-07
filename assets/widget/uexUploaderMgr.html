@@ -1,91 +1,154 @@
 <!DOCTYPE html>
 <html class="um landscape min-width-240px min-width-320px min-width-480px min-width-768px min-width-1024px">
-  <head>
+<head>
     <title>
     </title>
     <meta charset="utf-8">
     <meta name="viewport"
-        content="target-densitydpi=device-dpi, width=device-width, initial-scale=1.0, user-scalable=no" />
-        <link rel="stylesheet" type="text/css" href="css/index.css">
+          content="target-densitydpi=device-dpi, width=device-width, initial-scale=1.0, user-scalable=no"/>
+    <link rel="stylesheet" type="text/css" href="css/index.css">
     <link rel="stylesheet" href="css/ui-base.css">
     <link rel="stylesheet" href="css/ui-box.css">
     <link rel="stylesheet" href="css/ui-color.css">
-	<link rel="stylesheet" href="css/ui-res.css">
+    <link rel="stylesheet" href="css/ui-res.css">
     <link rel="stylesheet" href="css/ui-btn.css">
     <link rel="stylesheet" href="css/index.css">
+    <style>
+        input{color:red}
+    </style>
     <script src="js/zy_control.js">
     </script>
-    <script src="js/zy_click.js">
-    </script>
     <script type="text/javascript">
-		var uploadHttp = "http://te.3g2win.com/pidginimg/upload.php";
-	function explorerSuccess(data){
-		document.getElementById('dirPath').value = obj.fileExplorerPath;
-	}
+
+	const myUploaderID = "1";
+
 	function upload(){
-		uexUploaderMgr.createUploader(1,uploadHttp);
-		uexUploaderMgr.uploadFile(1,document.getElementById('dirPath').value,"inputName",document.getElementById('ys').value);	
-	}
-	
-	
+		var ext = {
+			type:+ getRadioValue("uploaderType")
+		}
+        if(uexUploaderMgr.createUploader(myUploaderID,document.getElementById('serverURL').value,JSON.stringify(ext))){
+            alert("uploader created!");
+            var header = {
+                myHeaderKey:"myHeaderValue"
+            };
+            uexUploaderMgr.setHeaders(myUploaderID,JSON.stringify(header));
+            /*
+            var fileData = {
+                id:myUploaderID,
+                filePath:document.getElementById('filePath').value,
+                field:document.getElementById('fileField').value
+            };
+            var imageData = {
+                id:myUploaderID,
+                filePath:document.getElementById('imagePath').value,
+                field:document.getElementById('imageField').value,
+                maxWidth:+document.getElementById('imageMaxWidth').value,
+                quality:+getRadioValue("imageQuaility"),
+            };
+
+            uexUploaderMgr.appendFileData(JSON.stringify(fileData));
+            uexUploaderMgr.appendFileData(JSON.stringify(imageData));
+            uexUploaderMgr.startUploader(myUploaderID);
+             */
+            
+            uexUploaderMgr.uploadFile(myUploaderID,
+                                      document.getElementById('imagePath').value,
+                                      document.getElementById('imageField').value,
+                                      +getRadioValue("imageQuaility"),
+                                      +document.getElementById('imageMaxWidth').value,
+                                      function(fileSize,percent,response,status){
+                                      switch (status) {
+                                      case 0:
+                                      document.getElementById('percentage').innerHTML = "packageSize："+fileSize+"<br>progress："+percent+"%";
+                                      break;
+                                      
+                                      case 1:
+                                      alert("upload SUCCESS!");
+                                      uexUploaderMgr.closeUploader(myUploaderID);
+                                      alert(response);
+                                      break;
+                                      case 2:
+                                      alert("upload FAILED!");
+                                      uexUploaderMgr.closeUploader(myUploaderID);
+                                      break;
+                                      
+                                      }
+                                      
+                                      });
+        }else{
+            alert("create uploader failed");
+        }
+    }
+    
+    
 	window.uexOnload = function(){
-		uexWidgetOne.cbError = function(opCode,errorCode,errorInfo){
-				alert(errorInfo);
-		}
-		uexUploaderMgr.onStatus = function(opCode,fileSize,percent,serverPath,status){
-		switch (status) {
-					case 0:
-						document.getElementById('percentage').innerHTML = "文件大小："+fileSize+"字节<br>上传进度："+percent+"%";
-						break;
+		
 
-					case 1:
-						uexUploaderMgr.closeUploader(1);
-						break;
-					case 2:
-						alert("上传失败");
-						uexUploaderMgr.closeUploader(1);
-						break;
-
-				}
-			
-		}
-		uexFileMgr.cbExplorer = function(opCode,dataType,data){
-			document.getElementById('dirPath').value = data;
-		}
-		uexUploaderMgr.cbCreateUploader =function(opCode,dataType,data){
-			if(data == 0){
-				alert("创建成功");
-			}else{
-				alert("创建失败");
-			}
-			
-		}
 	}
-		</script>
-  </head>
+
+
+	var getRadioValue = function(name){
+		var radios = document.getElementsByName(name);
+		var value;
+		for(var i = 0;i<radios.length;i++){
+			var radio = radios[i];
+			if(radio.checked){
+				value = radio.value;
+			}
+		}
+		return value;
+
+	}
+/*
+	var getInfo =function(){
+		var info = uexUploaderMgr.getInfo("1");
+		document.getElementById('info').innerHTML = info;
+	}
+*/
+
+    </script>
+</head>
 <body class="um-vp " ontouchstart>
-	<div class="conbor">
-		<div class="consj">
-			<span>1.文件上传</span>
-			<span>文件路径：</span>
-			 
-			<input  class="btn" type="button" value="启动文件浏览器" onclick="uexFileMgr.explorer('');">
-			
-			<input class="textbox" id="dirPath" type="text" value="res://zlackApple.pdf" >
-			<span>是否压缩</span>
-			<input class="textbox" id="ys" name ="是否压缩" type="text" value="0">
-			<input  class="btn" type="button" value="上传文件" onclick="upload();">
-			
-			<span>文件上传状态</span>
-			<div class="tcxx" id="percentage"></div>
-			<!-- 
-			<span>2.数据上传</span>
-			<input class="textbox" id="data" type="text" value="上传的数据" >
-			<input  class="btn" type="button" value="上传数据" onclick="upload1();">
-			-->
-			<br>
-		</div>
-	</div>
+<div class="conbor">
+    <div class="consj">
+        <h1>file upload</h1>
+
+        <span>serverURL:</span>
+        <input style="width:20em" type="text" id="serverURL" value="http://192.168.1.4:45678/upload"/>
+        <span>UploaderType:</span>
+        default<input type="radio" checked="checked" name="uploaderType" value="0"/>
+        global<input type="radio" name="uploaderType" value="1"/>
+        background<input type="radio" name="uploaderType" value="2"/>
+        <br/>
+        <!--			<span>a normal file</span>-->
+        <!--			filePath:-->
+        <!--			<input type="text" id="filePath" value="res://test.pdf"/><br/>-->
+        <!--			field:-->
+        <!--			<input type="text" id="fileField" value="myFile"/><br/>-->
+        <span>a image file</span>
+        filePath:
+        <input type="text" id="imagePath" value="res://image.jpg"/><br/>
+        field:
+        <input type="text" id="imageField" value="myImage"/><br/>
+        maxWidth:
+        <input type="text" id="imageMaxWidth" value="400"/><br/>
+        quality:
+        source<input type="radio" checked="checked" name="imageQuaility" value="0"/>
+        high<input type="radio" name="imageQuaility" value="1"/>
+        medium<input type="radio" name="imageQuaility" value="2"/>
+        low<input type="radio" name="imageQuaility" value="3"/>
+        <br/>
+
+        <input class="btn" type="button" value="upload" onclick="upload();">
+        <span>status</span>
+        <div class="tcxx" id="percentage"></div>
+
+        <!--			<input class="btn" type="button" value="getInfo" onclick="getInfo();">-->
+        <!--			<span>info</span>-->
+        <!--			<div class="tcxx" style="word-wrap:break-word" id="info"></div>-->
+        <br>
+    </div>
+</div>
 </body>
 <script>
 

@@ -1,7 +1,13 @@
 apply plugin: 'com.android.application'
-
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+}
 dependencies {
     compile fileTree(dir: 'libs', include: '*.jar')
+    compile(name: "Engine-system-debug-4.0.0", ext: 'aar')
+    compile(name: "uexFileMgr-debug", ext: 'aar')
 }
 
 android {
@@ -9,7 +15,7 @@ android {
         exclude 'META-INF/LICENSE.txt'
         exclude 'META-INF/NOTICE.txt'
     }
-    compileSdkVersion 22
+    compileSdkVersion 23
     buildToolsVersion "23.0.0"
     sourceSets {
         main {
@@ -42,6 +48,10 @@ android {
     }
     buildTypes {
 
+    }
+    defaultConfig {
+        minSdkVersion 14
+        applicationId 'org.zywx.wbpalmstar.widgetone.uexuploadermgr'
     }
 }
 
