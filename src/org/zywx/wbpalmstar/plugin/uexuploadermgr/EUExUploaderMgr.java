@@ -13,12 +13,14 @@ import android.util.Log;
 import org.json.JSONObject;
 import org.zywx.wbpalmstar.base.BDebug;
 import org.zywx.wbpalmstar.base.BUtility;
+import org.zywx.wbpalmstar.engine.DataHelper;
 import org.zywx.wbpalmstar.engine.EBrowserView;
 import org.zywx.wbpalmstar.engine.universalex.EUExBase;
 import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
 import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
 import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
 import org.zywx.wbpalmstar.platform.certificates.Http;
+import org.zywx.wbpalmstar.plugin.uexuploadermgr.vo.CreateVO;
 import org.zywx.wbpalmstar.widgetone.dataservice.WDataManager;
 import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
 
@@ -75,6 +77,7 @@ public class EUExUploaderMgr extends EUExBase {
     private String mCertPath = "";
     private boolean mHasCert = false;
     private String lastPercenttage = "";
+    private static int sCurrentId;
 
     public EUExUploaderMgr(Context context, EBrowserView inParent) {
         super(context, inParent);
@@ -113,6 +116,23 @@ public class EUExUploaderMgr extends EUExBase {
         jsCallback(F_CALLBACK_NAME_CREATEUPLOADER, Integer.parseInt(inOpCode),
                 EUExCallback.F_C_INT, EUExCallback.F_C_SUCCESS);
         return true;
+    }
+
+    public String create(String[] params){
+        CreateVO createVO= DataHelper.gson.fromJson(params[0],CreateVO.class);
+        if (createVO.id==null){
+            createVO.id=generateId();
+        }
+        boolean result=createUploader(new String[]{
+                createVO.id,
+                createVO.url
+        });
+        return result?createVO.id:null;
+    }
+
+    private String generateId(){
+        sCurrentId++;
+        return String.valueOf(sCurrentId);
     }
 
     public boolean closeUploader(String[] parm) {
