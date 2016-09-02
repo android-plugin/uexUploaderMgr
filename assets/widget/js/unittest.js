@@ -74,12 +74,19 @@ var UNIT_TEST = {
                     return;
                 }
                 self.testcase = self.units.shift();
-                var out = $("<div style='color:blue'> " + self.testcase.name + self.testcase.item + ":START CASE </div>");
-                self.dom.append(out);
-                self.testcase.run();
-            } catch(e) {
+                if (!window[self.testcase.name]){
+                    var out = $("<div style='color:red'>" + "插件不存在: "+self.testcase.name  + "</div>");
+                    self.dom.append(out);
+                    UNIT_TEST.assert(false);
+                }else{
+                    var out = $("<div style='color:blue'> " + self.testcase.name + self.testcase.item + ":START CASE </div>");
+                    self.dom.append(out);
+                    self.testcase.run();
+                }
+              } catch(e) {
                 var out = $("<div style='color:red'>" + self.testcase.name + self.testcase.item + ":" + e.message + "</div>");
                 self.dom.append(out);
+                UNIT_TEST.assert(false);
             }
         });
         this.trigger("_NEXTCASE", "");
