@@ -74,6 +74,7 @@ public class EUExUploaderMgr extends EUExBase {
 	private String mCertPath = "";
 	private boolean mHasCert = false;
     private String lastPercenttage = "";
+    private long lastPercentTime=0;
 
 	public EUExUploaderMgr(Context context, EBrowserView inParent) {
 		super(context, inParent);
@@ -538,9 +539,13 @@ public class EUExUploaderMgr extends EUExBase {
             } else {
                 percentage = df.format(msg * 100 / fileSize);
             }
-            if(!percentage.equals(lastPercenttage)
-                    || TextUtils.isEmpty(lastPercenttage))
+            long currentTime=System.currentTimeMillis();
+            if(!percentage.equals(lastPercenttage)&&
+                    ((currentTime-lastPercentTime)>200//进度回调间隔为200ms,或者进度为100也进行回调
+                            ||"100".equals(percentage)))
             {
+                lastPercenttage=percentage;
+                lastPercentTime=currentTime;
                 String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
                         + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + opCode + ","
                         + fileSize + "," + percentage + "," + "null,"
