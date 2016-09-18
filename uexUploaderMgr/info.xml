@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="3.0.11" build = "11">
+    <plugin uexName="uexUploaderMgr" version="3.0.12" build = "12">
         <info>12：修复回调过快的问题</info>
         <build>11：修复上传进度不准确的问题。</build>
         <build>10：支持uexBackground。</build>
