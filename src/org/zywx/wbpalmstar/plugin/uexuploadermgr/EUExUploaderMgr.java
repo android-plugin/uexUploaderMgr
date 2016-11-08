@@ -277,11 +277,12 @@ public class EUExUploaderMgr extends EUExBase {
         if (callbackId == -1) {
             String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
                     + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + packageSize + "," + percent + "," + responseString + "," + status + ")}";
+                    + "," + packageSize + "," + percent + "," + BUtility.transcoding(responseString) + "," + status +
+                    ")}";
             onCallback(js);
         } else {
-            boolean hasNext= status == EUExCallback.F_C_UpLoading;
-            callbackToJs(callbackId, hasNext, packageSize, percent, responseString, status);
+            boolean hasNext= (status == EUExCallback.F_C_UpLoading);
+            callbackToJs(callbackId, hasNext, packageSize, percent, BUtility.transcoding(responseString), status);
         }
     }
 
