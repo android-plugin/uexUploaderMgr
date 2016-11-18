@@ -10,6 +10,7 @@ import android.os.Message;
 import android.text.TextUtils;
 import android.util.Log;
 
+import org.apache.commons.io.IOUtils;
 import org.json.JSONObject;
 import org.zywx.wbpalmstar.base.BDebug;
 import org.zywx.wbpalmstar.base.BUtility;
@@ -24,7 +25,6 @@ import org.zywx.wbpalmstar.plugin.uexuploadermgr.vo.CreateVO;
 import org.zywx.wbpalmstar.widgetone.dataservice.WDataManager;
 import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -33,7 +33,6 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -46,6 +45,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
+import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.HttpsURLConnection;
 
@@ -78,6 +78,8 @@ public class EUExUploaderMgr extends EUExBase {
     private boolean mHasCert = false;
     private String lastPercenttage = "";
     private static int sCurrentId;
+    private InputStream mInputStream;
+    private long lastPercentTime = 0;
 
     public EUExUploaderMgr(Context context, EBrowserView inParent) {
         super(context, inParent);
@@ -118,19 +120,19 @@ public class EUExUploaderMgr extends EUExBase {
         return true;
     }
 
-    public String create(String[] params){
-        CreateVO createVO= DataHelper.gson.fromJson(params[0],CreateVO.class);
-        if (createVO.id==null){
-            createVO.id=generateId();
+    public String create(String[] params) {
+        CreateVO createVO = DataHelper.gson.fromJson(params[0], CreateVO.class);
+        if (createVO.id == null) {
+            createVO.id = generateId();
         }
-        boolean result=createUploader(new String[]{
+        boolean result = createUploader(new String[]{
                 createVO.id,
                 createVO.url
         });
-        return result?createVO.id:null;
+        return result ? createVO.id : null;
     }
 
-    private String generateId(){
+    private String generateId() {
         sCurrentId++;
         return String.valueOf(sCurrentId);
     }
@@ -277,12 +279,12 @@ public class EUExUploaderMgr extends EUExBase {
         if (callbackId == -1) {
             String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
                     + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + packageSize + "," + percent + ",'" + BUtility.transcoding(responseString) + "'," + status +
+                    + "," + packageSize + "," + percent + ",'" + responseString + "'," + status +
                     ")}";
             onCallback(js);
         } else {
-            boolean hasNext= (status == EUExCallback.F_C_UpLoading);
-            callbackToJs(callbackId, hasNext, packageSize, percent, BUtility.transcoding(responseString), status);
+            boolean hasNext = (status == EUExCallback.F_C_UpLoading);
+            callbackToJs(callbackId, hasNext, packageSize, percent, responseString, status);
         }
     }
 
@@ -298,7 +300,7 @@ public class EUExUploaderMgr extends EUExBase {
 
             if (formFile != null) {
                 if (formFile.m_inputStream == null) {
-                    callBackStatus(String.valueOf(inOpCode), 0, 0,"null", EUExCallback
+                    callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
                             .F_C_UpLoadError, callbackId);
                     return null;
                 }
@@ -308,6 +310,7 @@ public class EUExUploaderMgr extends EUExBase {
                 String BOUNDARY = UUID.randomUUID().toString(); // 边界标识 随机生成
                 String PREFIX = "--", LINE_END = "\r\n";
                 String CONTENT_TYPE = "multipart/form-data"; // 内容类型
+                String tail=LINE_END+PREFIX + BOUNDARY + PREFIX + LINE_END;
 
                 URL url = new URL(formFile.getM_targetAddress());
                 if (formFile.getM_targetAddress().startsWith(
@@ -330,12 +333,11 @@ public class EUExUploaderMgr extends EUExBase {
                 if (null != cookie) {
                     conn.setRequestProperty("Cookie", cookie);
                 }
-
-                conn.setReadTimeout(TIME_OUT);
+                 conn.setReadTimeout(TIME_OUT);
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
                 conn.setDoOutput(true); // 允许输出流
-                conn.setChunkedStreamingMode(4096);
+//                conn.setChunkedStreamingMode(4096); //Http 1.0 服务器不支持这种模式
                 conn.setUseCaches(false); // 不允许使用缓存
                 conn.setRequestMethod("POST"); // 请求方式
                 conn.setRequestProperty("Charset", CHARSET); // 设置编码
@@ -351,11 +353,7 @@ public class EUExUploaderMgr extends EUExBase {
                                     System.currentTimeMillis()));
                     conn.setRequestProperty(XMAS_APPID, mCurWData.m_appId);
                 }
-                /**
-                 * 当文件不为空，把文件包装并且上传
-                 */
-                DataOutputStream dos = new DataOutputStream(
-                        conn.getOutputStream());
+
                 StringBuffer sb = new StringBuffer();
                 sb.append(PREFIX);
                 sb.append(BOUNDARY);
@@ -371,11 +369,20 @@ public class EUExUploaderMgr extends EUExBase {
                 sb.append("Content-Type: application/octet-stream; charset="
                         + CHARSET + LINE_END);
                 sb.append(LINE_END);
-                dos.write(sb.toString().getBytes());
+                String stringData=sb.toString();
                 fileIs = formFile.m_inputStream;
                 // int l;
                 int upload = 0;
                 int fileSize = fileIs.available();
+                long requestLength=stringData.length()+tail.length()+fileSize;
+                conn.setRequestProperty("Content-length",requestLength+"");
+                conn.setFixedLengthStreamingMode((int)requestLength);
+
+
+                DataOutputStream dos = new DataOutputStream(
+                        conn.getOutputStream());
+                dos.write(sb.toString().getBytes());
+                fileIs = formFile.m_inputStream;
                 uploadPercentage.setFileSize(fileSize, inOpCode, callbackId);
                 byte[] bytes = new byte[4096];
                 int len = 0;
@@ -390,23 +397,16 @@ public class EUExUploaderMgr extends EUExBase {
                     return null;
                 }
 
-                dos.write(LINE_END.getBytes());
-                byte[] end_data = (PREFIX + BOUNDARY + PREFIX + LINE_END)
-                        .getBytes();
+                byte[] end_data = tail.getBytes();
                 dos.write(end_data);
-
+                dos.flush();
                 int res = conn.getResponseCode();
                 if (res == 200) {
                     callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, "null", EUExCallback.F_C_UpLoading, callbackId);
-                    InputStreamReader isReader = new InputStreamReader(
-                            conn.getInputStream(), CHARSET);
-                    BufferedReader bufReader = new BufferedReader(isReader);
-                    StringBuffer buffer = new StringBuffer();
-                    String line = " ";
-                    while ((line = bufReader.readLine()) != null) {
-                        buffer.append(line);
-                    }
-                    callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, buffer.toString(), EUExCallback.F_C_FinishUpLoad, callbackId);
+                    byte[] bResult = toByteArray(conn);
+                    String result = BUtility.transcoding(new String(bResult, "UTF-8"));
+                    callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, result, EUExCallback
+                            .F_C_FinishUpLoad, callbackId);
 
                 } else {
                     callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
@@ -443,6 +443,9 @@ public class EUExUploaderMgr extends EUExBase {
                 if (conn != null) {
                     conn.disconnect();
                 }
+                if (mInputStream != null) {
+                    mInputStream.close();
+                }
             } catch (IOException e) {
                 if (BDebug.DEBUG) {
                     e.printStackTrace();
@@ -455,6 +458,29 @@ public class EUExUploaderMgr extends EUExBase {
 
         return null;
     }
+
+    private byte[] toByteArray(HttpURLConnection conn) throws Exception {
+        if (null == conn) {
+            return new byte[]{};
+        }
+        mInputStream = conn.getInputStream();
+        if (mInputStream == null) {
+            return new byte[]{};
+        }
+        long len = conn.getContentLength();
+        if (len > Integer.MAX_VALUE) {
+            throw new Exception(
+                    "HTTP entity too large to be buffered in memory");
+        }
+        String contentEncoding = conn.getContentEncoding();
+        if (null != contentEncoding) {
+            if ("gzip".equalsIgnoreCase(contentEncoding)) {
+                mInputStream = new GZIPInputStream(mInputStream, 2048);
+            }
+        }
+        return IOUtils.toByteArray(mInputStream);
+    }
+
 
     private void addHeaders(HttpURLConnection mConnection) {
         if (null != mConnection) {
@@ -488,129 +514,141 @@ public class EUExUploaderMgr extends EUExBase {
             } else {
                 percentage = df.format(msg * 100 / fileSize);
             }
-            if (!percentage.equals(lastPercenttage)
-                    || TextUtils.isEmpty(lastPercenttage)) {
-                callBackStatus(String.valueOf(opCode), fileSize, Integer.parseInt(percentage),"null", EUExCallback
-                        .F_C_UpLoading, callbackId);
+            long currentTime = System.currentTimeMillis();
+            if (!percentage.equals(lastPercenttage) &&
+                    ((currentTime - lastPercentTime) > 200//进度回调间隔为200ms,或者进度为100也进行回调
+                            || "100".equals(percentage))) {
+                    lastPercenttage = percentage;
+                    lastPercentTime = currentTime;
+                    callBackStatus(String.valueOf(opCode), fileSize, Integer.parseInt(percentage), "null", EUExCallback
+                            .F_C_UpLoading, callbackId);
+                }
+
             }
-
         }
-    }
 
-    public boolean setHeaders(String[] params) {
-        if (params.length < 2 || null == params) {
+        public boolean setHeaders(String[] params) {
+            if (params.length < 2 || null == params) {
+                return false;
+            }
+            String opCode = params[0];
+            String headJson = params[1];
+            if (objectMap.get(Integer.parseInt(opCode)) != null) {
+                try {
+                    JSONObject json = new JSONObject(headJson);
+                    Iterator<?> keys = json.keys();
+                    while (keys.hasNext()) {
+                        String key = (String) keys.next();
+                        String value = json.getString(key);
+                        mHttpHead.put(key, value);
+                    }
+                } catch (Exception e) {
+                    if (BDebug.DEBUG) {
+                        e.printStackTrace();
+                    }
+                }
+
+            }
+            return true;
+        }
+
+        @Override
+        protected boolean clean() {
             return false;
         }
-        String opCode = params[0];
-        String headJson = params[1];
-        if (objectMap.get(Integer.parseInt(opCode)) != null) {
-            try {
-                JSONObject json = new JSONObject(headJson);
-                Iterator<?> keys = json.keys();
-                while (keys.hasNext()) {
-                    String key = (String) keys.next();
-                    String value = json.getString(key);
-                    mHttpHead.put(key, value);
-                }
-            } catch (Exception e) {
-                if (BDebug.DEBUG) {
-                    e.printStackTrace();
-                }
-            }
 
-        }
-        return true;
-    }
-
-    @Override
-    protected boolean clean() {
-        return false;
-    }
-
-    private InputStream compress(Context m_eContext, String path, int compress,
-                                 float with) throws OutOfMemoryError, IOException {
-        FileDescriptor fileDescriptor = null;
-        boolean isRes = false;
-        if (!path.startsWith("/")) {
-            AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
-                    .openFd(path);
-            fileDescriptor = assetFileDescriptor.getFileDescriptor();
-            isRes = true;
-        } else {
-            FileInputStream fis = new FileInputStream(new File(path));
-            fileDescriptor = fis.getFD();
-        }
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inJustDecodeBounds = true;
-        Bitmap source = BitmapFactory.decodeFileDescriptor(fileDescriptor,
-                null, options);
-        if (options.outHeight <= 0 || options.outWidth <= 0) {
-            if (isRes) {
-                return m_eContext.getAssets().open(path);
+        private InputStream compress(Context m_eContext, String path, int compress,
+                                     float with) throws OutOfMemoryError, IOException {
+            FileDescriptor fileDescriptor = null;
+            boolean isRes = false;
+            if (!path.startsWith("/")) {
+                AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
+                        .openFd(path);
+                fileDescriptor = assetFileDescriptor.getFileDescriptor();
+                isRes = true;
             } else {
-                return new FileInputStream(new File(path));
+                FileInputStream fis = new FileInputStream(new File(path));
+                fileDescriptor = fis.getFD();
+            }
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            Bitmap source = BitmapFactory.decodeFileDescriptor(fileDescriptor,
+                    null, options);
+            if (options.outHeight <= 0 || options.outWidth <= 0) {
+                if (isRes) {
+                    return m_eContext.getAssets().open(path);
+                } else {
+                    return new FileInputStream(new File(path));
+                }
+
             }
 
-        }
+            int quality = 0;
+            if (compress == 1) {
+                quality = 100;
+            } else if (compress == 2) {
+                quality = 75;
+            } else if (compress == 3) {
+                quality = 50;
+            } else {
+                quality = 25;
+            }
 
-        int quality = 0;
-        if (compress == 1) {
-            quality = 100;
-        } else if (compress == 2) {
-            quality = 75;
-        } else if (compress == 3) {
-            quality = 50;
-        } else {
-            quality = 25;
-        }
+            float max = with == -1 ? 640 : with;
+            float src_w = options.outWidth;
+            float scaleRate = 1;
 
-        float max = with == -1 ? 640 : with;
-        float src_w = options.outWidth;
-        float scaleRate = 1;
+            scaleRate = src_w / max;
 
-        scaleRate = src_w / max;
+            scaleRate = scaleRate > 1 ? scaleRate : 1;
 
-        scaleRate = scaleRate > 1 ? scaleRate : 1;
+            if (scaleRate != 1) {
+                Bitmap dstbmp = null;
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
+                options.inSampleSize = (int) scaleRate;
+                options.inJustDecodeBounds = false;
+                options.inInputShareable = true;
+                options.inPurgeable = true;
+                options.inPreferredConfig = Config.RGB_565;// 会失真，缩略图失真没事^_^
 
-        if (scaleRate != 1) {
-            Bitmap dstbmp = null;
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-            options.inSampleSize = (int) scaleRate;
-            options.inJustDecodeBounds = false;
-            options.inInputShareable = true;
-            options.inPurgeable = true;
-            options.inPreferredConfig = Config.RGB_565;// 会失真，缩略图失真没事^_^
-
-            source = BitmapFactory.decodeFileDescriptor(fileDescriptor, null,
-                    options);
-            if (source != null) {
-                int srcWidth = source.getWidth();
-                int srcHeight = source.getHeight();
-                final float sacleRate = max / (float) srcWidth;
-                if (sacleRate != 1) {
-                    final int destWidth = (int) (srcWidth * sacleRate);
-                    final int destHeight = (int) (srcHeight * sacleRate);
-                    dstbmp = Bitmap.createScaledBitmap(source, destWidth,
-                            destHeight, false);
-                    if (source != null && !source.isRecycled()) {
-                        source.recycle();
+                source = BitmapFactory.decodeFileDescriptor(fileDescriptor, null,
+                        options);
+                if (source != null) {
+                    int srcWidth = source.getWidth();
+                    int srcHeight = source.getHeight();
+                    final float sacleRate = max / (float) srcWidth;
+                    if (sacleRate != 1) {
+                        final int destWidth = (int) (srcWidth * sacleRate);
+                        final int destHeight = (int) (srcHeight * sacleRate);
+                        dstbmp = Bitmap.createScaledBitmap(source, destWidth,
+                                destHeight, false);
+                        if (source != null && !source.isRecycled()) {
+                            source.recycle();
+                        }
+                    } else {
+                        dstbmp = source;
+                    }
+                    if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
+                        if (dstbmp != null && !dstbmp.isRecycled()) {
+                            dstbmp.recycle();
+                        }
+                        return new ByteArrayInputStream(baos.toByteArray());
+                    } else {
+                        baos.close();
+                        if (isRes) {
+                            return m_eContext.getAssets().open(path);
+                        } else {
+                            return new FileInputStream(new File(path));
+                        }
                     }
                 } else {
-                    dstbmp = source;
-                }
-                if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
-                    if (dstbmp != null && !dstbmp.isRecycled()) {
-                        dstbmp.recycle();
-                    }
-                    return new ByteArrayInputStream(baos.toByteArray());
-                } else {
-                    baos.close();
                     if (isRes) {
                         return m_eContext.getAssets().open(path);
                     } else {
                         return new FileInputStream(new File(path));
                     }
                 }
+
             } else {
                 if (isRes) {
                     return m_eContext.getAssets().open(path);
@@ -619,79 +657,71 @@ public class EUExUploaderMgr extends EUExBase {
                 }
             }
 
-        } else {
-            if (isRes) {
-                return m_eContext.getAssets().open(path);
-            } else {
-                return new FileInputStream(new File(path));
+        }
+
+        @Override
+        public void onHandleMessage(Message msg) {
+
+        }
+
+        /**
+         * 添加验证头
+         *
+         * @param curWData  当前widgetData
+         * @param timeStamp 当前时间戳
+         * @return
+         */
+        private String getAppVerifyValue(WWidgetData curWData, long timeStamp) {
+            String value = null;
+            String md5 = getMD5Code(curWData.m_appId + ":" + curWData.m_appkey
+                    + ":" + timeStamp);
+            value = "md5=" + md5 + ";ts=" + timeStamp;
+            return value;
+
+        }
+
+        private String getMD5Code(String value) {
+            if (value == null) {
+                value = "";
             }
-        }
-
-    }
-
-    @Override
-    public void onHandleMessage(Message msg) {
-
-    }
-
-    /**
-     * 添加验证头
-     *
-     * @param curWData  当前widgetData
-     * @param timeStamp 当前时间戳
-     * @return
-     */
-    private String getAppVerifyValue(WWidgetData curWData, long timeStamp) {
-        String value = null;
-        String md5 = getMD5Code(curWData.m_appId + ":" + curWData.m_appkey
-                + ":" + timeStamp);
-        value = "md5=" + md5 + ";ts=" + timeStamp;
-        return value;
-
-    }
-
-    private String getMD5Code(String value) {
-        if (value == null) {
-            value = "";
-        }
-        try {
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            md.reset();
-            md.update(value.getBytes());
-            byte[] md5Bytes = md.digest();
-            StringBuffer hexValue = new StringBuffer();
-            for (int i = 0; i < md5Bytes.length; i++) {
-                int val = ((int) md5Bytes[i]) & 0xff;
-                if (val < 16)
-                    hexValue.append("0");
-                hexValue.append(Integer.toHexString(val));
+            try {
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                md.reset();
+                md.update(value.getBytes());
+                byte[] md5Bytes = md.digest();
+                StringBuffer hexValue = new StringBuffer();
+                for (int i = 0; i < md5Bytes.length; i++) {
+                    int val = ((int) md5Bytes[i]) & 0xff;
+                    if (val < 16)
+                        hexValue.append("0");
+                    hexValue.append(Integer.toHexString(val));
+                }
+                return hexValue.toString();
+            } catch (NoSuchAlgorithmException e) {
+                if (BDebug.DEBUG) {
+                    e.printStackTrace();
+                }
             }
-            return hexValue.toString();
-        } catch (NoSuchAlgorithmException e) {
-            if (BDebug.DEBUG) {
-                e.printStackTrace();
+
+            return null;
+        }
+
+        /**
+         * plugin里面的子应用的appId和appkey都按照主应用为准
+         */
+        private WWidgetData getWidgetData(EBrowserView view) {
+            WWidgetData widgetData = view.getCurrentWidget();
+            if (widgetData == null) {
+                widgetData = WDataManager.sRootWgt;
             }
-        }
-
-        return null;
-    }
-
-    /**
-     * plugin里面的子应用的appId和appkey都按照主应用为准
-     */
-    private WWidgetData getWidgetData(EBrowserView view) {
-        WWidgetData widgetData = view.getCurrentWidget();
-        if (widgetData==null){
-            widgetData= WDataManager.sRootWgt;
-        }
-        String indexUrl = widgetData.m_indexUrl;
-        Log.i("uexUploaderMgr", "m_indexUrl:" + indexUrl);
-        if (widgetData.m_wgtType != 0) {
-            if (indexUrl.contains("widget/plugin")) {
-                return view.getRootWidget();
+            String indexUrl = widgetData.m_indexUrl;
+            Log.i("uexUploaderMgr", "m_indexUrl:" + indexUrl);
+            if (widgetData.m_wgtType != 0) {
+                if (indexUrl.contains("widget/plugin")) {
+                    return view.getRootWidget();
+                }
             }
+            return widgetData;
         }
-        return widgetData;
-    }
 
-}
+    }
