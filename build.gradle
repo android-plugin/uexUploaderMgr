@@ -3,17 +3,27 @@ buildscript {
         jcenter()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:2.1.0'
+        classpath 'com.android.tools.build:gradle:2.1.2'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
     }
 }
 
-apply plugin: 'com.android.application'
 
+apply plugin: 'com.android.application'
+repositories {
+    flatDir {
+        dirs 'libs'
+    }
+    maven {
+        url 'https://raw.githubusercontent.com/android-plugin/mvn-repo/master/'
+    }
+}
 dependencies {
     compile fileTree(dir: 'libs', include: '*.jar')
+    compile 'org.appcan:engine:+:systemRelease@aar'
+    compile(name: "uexFileMgr-debug", ext: 'aar')
 }
 
 android {
@@ -21,8 +31,8 @@ android {
         exclude 'META-INF/LICENSE.txt'
         exclude 'META-INF/NOTICE.txt'
     }
-    compileSdkVersion 22
-    buildToolsVersion "23.0.0"
+    compileSdkVersion 23
+    buildToolsVersion "23.0.2"
     sourceSets {
         main {
             manifest.srcFile 'AndroidManifest.xml'
@@ -54,6 +64,11 @@ android {
     }
     buildTypes {
 
+    }
+    defaultConfig {
+        minSdkVersion 14
+        applicationId 'org.zywx.wbpalmstar.widgetone.uexuploadermgr'
+        multiDexEnabled true
     }
 }
 
