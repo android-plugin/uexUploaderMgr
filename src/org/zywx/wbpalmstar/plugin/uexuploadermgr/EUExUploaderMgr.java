@@ -341,7 +341,7 @@ public class EUExUploaderMgr extends EUExBase {
                 String BOUNDARY = UUID.randomUUID().toString(); // 边界标识 随机生成
                 String PREFIX = "--", LINE_END = "\r\n";
                 String CONTENT_TYPE = "multipart/form-data"; // 内容类型
-
+                String tail=LINE_END+PREFIX + BOUNDARY + PREFIX + LINE_END;
                 URL url = new URL(formFile.getM_targetAddress());
 				if (formFile.getM_targetAddress().startsWith(
 						BUtility.F_HTTP_PATH)) {
@@ -368,7 +368,7 @@ public class EUExUploaderMgr extends EUExBase {
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
                 conn.setDoOutput(true); // 允许输出流
-                conn.setChunkedStreamingMode(4096);
+//                conn.setChunkedStreamingMode(4096);
                 conn.setUseCaches(false); // 不允许使用缓存
                 conn.setRequestMethod("POST"); // 请求方式
                 conn.setRequestProperty("Charset", CHARSET); // 设置编码
@@ -387,8 +387,6 @@ public class EUExUploaderMgr extends EUExBase {
 				/**
                  * 当文件不为空，把文件包装并且上传
                  */
-                DataOutputStream dos = new DataOutputStream(
-                        conn.getOutputStream());
                 StringBuffer sb = new StringBuffer();
                 sb.append(PREFIX);
                 sb.append(BOUNDARY);
@@ -404,12 +402,18 @@ public class EUExUploaderMgr extends EUExBase {
                 sb.append("Content-Type: application/octet-stream; charset="
                         + CHARSET + LINE_END);
                 sb.append(LINE_END);
-                dos.write(sb.toString().getBytes());
-                fileIs = formFile.m_inputStream;
+                String stringData=sb.toString();
+                 fileIs = formFile.m_inputStream;
                 // int l;
                 int upload = 0;
                 int fileSize = fileIs.available();
+                long requestLength=stringData.length()+tail.length()+fileSize;
+                conn.setRequestProperty("Content-length",requestLength+"");
+                conn.setFixedLengthStreamingMode((int)requestLength);
                 uploadPercentage.setFileSize(fileSize, inOpCode);
+                DataOutputStream dos = new DataOutputStream(
+                        conn.getOutputStream());
+                dos.write(stringData.getBytes());
                 byte[] bytes = new byte[4096];
                 int len = 0;
                 try {
@@ -428,11 +432,9 @@ public class EUExUploaderMgr extends EUExBase {
                     return null;
                 }
 
-                dos.write(LINE_END.getBytes());
-                byte[] end_data = (PREFIX + BOUNDARY + PREFIX + LINE_END)
-                        .getBytes();
+                byte[] end_data =tail.getBytes();
                 dos.write(end_data);
-
+                dos.flush();
                 int res = conn.getResponseCode();
                 if (res == 200) {
                     String js = SCRIPT_HEADER + "if("

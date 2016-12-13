@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="3.0.12" build = "12">
-        <info>12：修复回调过快的问题</info>
+    <plugin uexName="uexUploaderMgr" version="3.0.13" build = "13">
+        <info>13：修复不支持http/1.0的问题</info>
+        <build>12：修复回调过快的问题</build>
         <build>11：修复上传进度不准确的问题。</build>
         <build>10：支持uexBackground。</build>
         <build>9：兼容http请求返回数据编码格式不是utf-8的情况；修复上传进度回调过快的问题。</build>
