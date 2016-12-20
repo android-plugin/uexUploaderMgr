@@ -1,6 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="4.0.0" build = "0">
-        <info>0：4.0</info>
+    <plugin uexName="uexUploaderMgr" version="4.0.1" build = "1">
+        <info>1：修复uploadFile压缩参数失效的问题</info>
+        <build>0：4.0</build>
     </plugin>
 </uexplugins>

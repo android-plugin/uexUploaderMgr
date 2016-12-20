@@ -157,12 +157,11 @@ public class EUExUploaderMgr extends EUExBase {
         String inFilePath = parm[1];
         final String inInputName = parm[2];
         int inCompress = 0;
-        if (parm.length == 4) {
+        if (parm.length > 3) {
             inCompress = Integer.parseInt(parm[3]);
         }
         float inWith = -1;
-        if (parm.length == 5) {
-            inCompress = Integer.parseInt(parm[3]);
+        if (parm.length > 4) {
             if (!TextUtils.isEmpty(parm[4])) {
                 inWith = Float.valueOf(parm[4]);
             }
