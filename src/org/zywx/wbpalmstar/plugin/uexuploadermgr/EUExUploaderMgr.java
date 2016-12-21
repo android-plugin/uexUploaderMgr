@@ -373,7 +373,7 @@ public class EUExUploaderMgr extends EUExBase {
                 // int l;
                 int upload = 0;
                 int fileSize = fileIs.available();
-                long requestLength=stringData.length()+tail.length()+fileSize;
+                long requestLength=stringData.getBytes().length+tail.length()+fileSize;
                 conn.setRequestProperty("Content-length",requestLength+"");
                 conn.setFixedLengthStreamingMode((int)requestLength);
 
