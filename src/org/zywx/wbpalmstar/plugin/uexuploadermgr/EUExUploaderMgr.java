@@ -332,7 +332,8 @@ public class EUExUploaderMgr extends EUExBase {
                 if (null != cookie) {
                     conn.setRequestProperty("Cookie", cookie);
                 }
-                 conn.setReadTimeout(TIME_OUT);
+                conn.setInstanceFollowRedirects(true);//自动处理重定向
+                conn.setReadTimeout(TIME_OUT);
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
                 conn.setDoOutput(true); // 允许输出流
@@ -400,7 +401,7 @@ public class EUExUploaderMgr extends EUExBase {
                 dos.write(end_data);
                 dos.flush();
                 int res = conn.getResponseCode();
-                if (res == 200) {
+                if (res >= HttpURLConnection.HTTP_OK && res < 300) {
                     callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, "null", EUExCallback.F_C_UpLoading, callbackId);
                     byte[] bResult = toByteArray(conn);
                     String result = BUtility.transcoding(new String(bResult, "UTF-8"));
