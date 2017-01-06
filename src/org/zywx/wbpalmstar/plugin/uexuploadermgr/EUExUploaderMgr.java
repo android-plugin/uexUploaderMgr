@@ -1,6 +1,30 @@
 package org.zywx.wbpalmstar.plugin.uexuploadermgr;
 
-import java.io.BufferedReader;
+import android.content.Context;
+import android.content.res.AssetFileDescriptor;
+import android.graphics.Bitmap;
+import android.graphics.Bitmap.CompressFormat;
+import android.graphics.Bitmap.Config;
+import android.graphics.BitmapFactory;
+import android.os.Message;
+import android.text.TextUtils;
+import android.util.Log;
+
+import org.apache.commons.io.IOUtils;
+import org.json.JSONObject;
+import org.zywx.wbpalmstar.base.BDebug;
+import org.zywx.wbpalmstar.base.BUtility;
+import org.zywx.wbpalmstar.engine.DataHelper;
+import org.zywx.wbpalmstar.engine.EBrowserView;
+import org.zywx.wbpalmstar.engine.universalex.EUExBase;
+import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
+import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
+import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
+import org.zywx.wbpalmstar.platform.certificates.Http;
+import org.zywx.wbpalmstar.plugin.uexuploadermgr.vo.CreateVO;
+import org.zywx.wbpalmstar.widgetone.dataservice.WDataManager;
+import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -9,7 +33,6 @@ import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -22,43 +45,23 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
+import java.util.zip.GZIPInputStream;
 
 import javax.net.ssl.HttpsURLConnection;
 
-import org.json.JSONObject;
-import org.zywx.wbpalmstar.base.BUtility;
-import org.zywx.wbpalmstar.engine.EBrowserView;
-import org.zywx.wbpalmstar.engine.universalex.EUExBase;
-import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
-import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
-import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
-import org.zywx.wbpalmstar.platform.certificates.Http;
-import org.zywx.wbpalmstar.widgetone.dataservice.WWidgetData;
-
-import android.content.Context;
-import android.content.res.AssetFileDescriptor;
-import android.graphics.Bitmap;
-import android.graphics.Bitmap.CompressFormat;
-import android.graphics.Bitmap.Config;
-import android.graphics.BitmapFactory;
-import android.os.Bundle;
-import android.os.Message;
-import android.text.TextUtils;
-import android.util.Log;
-
 public class EUExUploaderMgr extends EUExBase {
 
-	public final static String KEY_APPVERIFY = "appverify";
-	public final static String XMAS_APPID = "x-mas-app-id";
-	private WWidgetData mCurWData;
+    public final static String KEY_APPVERIFY = "appverify";
+    public final static String XMAS_APPID = "x-mas-app-id";
+    private WWidgetData mCurWData;
 
-	public static final String tag = "uexUploaderMgr_";
-	private static final String F_CALLBACK_NAME_UPLOADSTATUS = "uexUploaderMgr.onStatus";
-	private static final String F_CALLBACK_NAME_CREATEUPLOADER = "uexUploaderMgr.cbCreateUploader";
+    public static final String tag = "uexUploaderMgr_";
+    private static final String F_CALLBACK_NAME_UPLOADSTATUS = "uexUploaderMgr.onStatus";
+    private static final String F_CALLBACK_NAME_CREATEUPLOADER = "uexUploaderMgr.cbCreateUploader";
 
     public static final int F_FILE_TYPE_CREATE = 0;
     public static final int F_FILE_TYPE_UPLOAD = 1;
-    
+
     public static final int TAG_MSG_CREATE = 1;
     public static final int TAG_MSG_UPLOAD = 2;
     public static final int TAG_MSG_CLOSE = 3;
@@ -70,145 +73,115 @@ public class EUExUploaderMgr extends EUExBase {
     private static final String TAG_PARAMS_DATA = "data";
     private HashMap<Integer, EUExFormFile> objectMap;
     private HashMap<String, String> mHttpHead;
-	private String mCertPassword = "";
-	private String mCertPath = "";
-	private boolean mHasCert = false;
+    private String mCertPassword = "";
+    private String mCertPath = "";
+    private boolean mHasCert = false;
     private String lastPercenttage = "";
+    private static int sCurrentId;
+    private InputStream mInputStream;
+    private long lastPercentTime = 0;
 
-	public EUExUploaderMgr(Context context, EBrowserView inParent) {
-		super(context, inParent);
-		objectMap = new HashMap<Integer, EUExFormFile>();
-		mHttpHead = new HashMap<String, String>();
-        if (inParent.getBrowserWindow()!=null) {
+    public EUExUploaderMgr(Context context, EBrowserView inParent) {
+        super(context, inParent);
+        objectMap = new HashMap<Integer, EUExFormFile>();
+        mHttpHead = new HashMap<String, String>();
+        if (inParent.getBrowserWindow() != null) {
             mCurWData = getWidgetData(inParent);
         }
-	}
-
-    public void createUploader(String[] parm) {
-        if(parm == null || parm.length < 2){
-            errorCallback(0, 0, "error params!");
-            return;
-        }
-        Message msg = new Message();
-        msg.what = TAG_MSG_CREATE;
-        msg.obj = this;
-        Bundle bd = new Bundle();
-        bd.putStringArray(TAG_PARAMS_DATA, parm);
-        msg.setData(bd);
-        mHandler.sendMessage(msg);
     }
-    
-    public void createUploaderMsg(String[] parm) {
+
+    public boolean createUploader(String[] parm) {
         if (parm == null || parm.length < 2) {
-            return;
+            return false;
         }
         String inOpCode = parm[0], inTargetAddress = parm[1];
         if (!BUtility.isNumeric(inOpCode)) {
-            return;
+            return false;
         }
         if (objectMap.containsKey(Integer.parseInt(inOpCode))) {
             jsCallback(F_CALLBACK_NAME_CREATEUPLOADER,
                     Integer.parseInt(inOpCode), EUExCallback.F_C_INT,
                     EUExCallback.F_C_FAILED);
-            return;
+            return false;
         }
         if (inTargetAddress == null || inTargetAddress.length() == 0
                 || !(inTargetAddress.startsWith(BUtility.F_HTTP_PATH)
-                	|| inTargetAddress.startsWith("https://"))) {
+                || inTargetAddress.startsWith("https://"))) {
             jsCallback(F_CALLBACK_NAME_CREATEUPLOADER,
                     Integer.parseInt(inOpCode), EUExCallback.F_C_INT,
                     EUExCallback.F_C_FAILED);
-            return;
+            return false;
         }
 
         objectMap.put(Integer.parseInt(inOpCode), new EUExFormFile(
                 inTargetAddress, null));
         jsCallback(F_CALLBACK_NAME_CREATEUPLOADER, Integer.parseInt(inOpCode),
                 EUExCallback.F_C_INT, EUExCallback.F_C_SUCCESS);
+        return true;
     }
 
-    public void closeUploader(String[] parm) {
-        if(parm == null || parm.length < 1){
-            errorCallback(0, 0, "error params!");
-            return;
+    public String create(String[] params) {
+        CreateVO createVO = DataHelper.gson.fromJson(params[0], CreateVO.class);
+        if (createVO.id == null) {
+            createVO.id = generateId();
         }
-        Message msg = new Message();
-        msg.what = TAG_MSG_CLOSE;
-        msg.obj = this;
-        Bundle bd = new Bundle();
-        bd.putStringArray(TAG_PARAMS_DATA, parm);
-        msg.setData(bd);
-        mHandler.sendMessage(msg);
+        boolean result = createUploader(new String[]{
+                createVO.id,
+                createVO.url
+        });
+        return result ? createVO.id : null;
     }
-    
-    public void closeUploaderMsg(String[] parm) {
-        if(parm == null || parm.length < 1){
-            return;
+
+    private String generateId() {
+        sCurrentId++;
+        return String.valueOf(sCurrentId);
+    }
+
+    public boolean closeUploader(String[] parm) {
+        if (parm == null || parm.length < 1) {
+            return false;
         }
         String inOpCode = parm[0];
         if (!BUtility.isNumeric(inOpCode)) {
-            return;
+            return false;
         }
         objectMap.remove(Integer.parseInt(inOpCode));
+        return true;
     }
 
     public void uploadFile(String[] parm) {
-        if(parm == null || parm.length < 3){
-            errorCallback(0, 0, "error params!");
-            return;
-        }
-        Message msg = new Message();
-        msg.what = TAG_MSG_UPLOAD;
-        msg.obj = this;
-        Bundle bd = new Bundle();
-        bd.putStringArray(TAG_PARAMS_DATA, parm);
-        msg.setData(bd);
-        mHandler.sendMessage(msg);
-    }
-    
-    public void uploadFileMsg(String[] parm) {
         if (parm == null || parm.length < 3) {
             return;
         }
-
         final String inOpCode = parm[0];
         String inFilePath = parm[1];
         final String inInputName = parm[2];
         int inCompress = 0;
-        if (parm.length == 4) {
+        if (parm.length > 3) {
             inCompress = Integer.parseInt(parm[3]);
         }
         float inWith = -1;
-        if (parm.length == 5) {
-            inCompress = Integer.parseInt(parm[3]);
+        if (parm.length > 4) {
             if (!TextUtils.isEmpty(parm[4])) {
-                inWith = Float.valueOf(parm[4]).floatValue();
+                inWith = Float.valueOf(parm[4]);
             }
+        }
+        int callbackId = -1;
+        if (parm.length > 5) {
+            callbackId = Integer.parseInt(parm[5]);
         }
         if (!BUtility.isNumeric(inOpCode)) {
             return;
         }
         if (inFilePath == null || inFilePath.length() == 0) {
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + 0 + "," + 0 + "," + "null,"
-                    + EUExCallback.F_C_UpLoadError + ")}";
-            onCallback(js);
+            callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
             return;
 
         }
-        if (mBrwView.getCurrentWidget() == null) {
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + 0 + "," + 0 + "," + "null,"
-                    + EUExCallback.F_C_UpLoadError + ")}";
-            onCallback(js);
-            return;
-        }
         inFilePath = BUtility.makeRealPath(
                 BUtility.makeUrl(mBrwView.getCurrentUrl(), inFilePath),
-                mBrwView.getCurrentWidget().m_widgetPath,
-                mBrwView.getCurrentWidget().m_wgtType);
+                mCurWData.m_widgetPath,
+                mCurWData.m_wgtType);
         if (inFilePath.startsWith(BUtility.F_FILE_SCHEMA)) {
             inFilePath = inFilePath.substring(BUtility.F_FILE_SCHEMA.length());
         }
@@ -223,12 +196,7 @@ public class EUExUploaderMgr extends EUExBase {
             if (inFilePath.startsWith("/")) {
                 File file = new File(inFilePath);
                 if (!file.exists()) {
-                    String js = SCRIPT_HEADER + "if("
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                            + "," + 0 + "," + 0 + "," + "null,"
-                            + EUExCallback.F_C_UpLoadError + ")}";
-                    onCallback(js);
+                    callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
                     return;
                 }
                 InputStream inputSteam = null;
@@ -237,22 +205,16 @@ public class EUExUploaderMgr extends EUExBase {
                         inputSteam = compress(mContext, inFilePath, inCompress,
                                 inWith);
                     } catch (OutOfMemoryError e) {
-                        String js = SCRIPT_HEADER + "if("
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                                + "," + 0 + "," + 0 + "," + "null,"
-                                + EUExCallback.F_C_UpLoadError + ")}";
-                        onCallback(js);
-                        e.printStackTrace();
+                        callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
+                        if (BDebug.DEBUG) {
+                            e.printStackTrace();
+                        }
                         return;
                     } catch (IOException e) {
-                        String js = SCRIPT_HEADER + "if("
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                                + "," + 0 + "," + 0 + "," + "null,"
-                                + EUExCallback.F_C_UpLoadError + ")}";
-                        onCallback(js);
-                        e.printStackTrace();
+                        callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
+                        if (BDebug.DEBUG) {
+                            e.printStackTrace();
+                        }
                         return;
                     }
 
@@ -269,22 +231,16 @@ public class EUExUploaderMgr extends EUExBase {
                         inputSteam = compress(mContext, inFilePath, inCompress,
                                 inWith);
                     } catch (OutOfMemoryError e) {
-                        String js = SCRIPT_HEADER + "if("
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                                + "," + 0 + "," + 0 + "," + "null,"
-                                + EUExCallback.F_C_UpLoadError + ")}";
-                        onCallback(js);
-                        e.printStackTrace();
+                        callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
+                        if (BDebug.DEBUG) {
+                            e.printStackTrace();
+                        }
                         return;
                     } catch (IOException e) {
-                        String js = SCRIPT_HEADER + "if("
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                                + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                                + "," + 0 + "," + 0 + "," + "null,"
-                                + EUExCallback.F_C_UpLoadError + ")}";
-                        onCallback(js);
-                        e.printStackTrace();
+                        callBackStatus(inOpCode, 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
+                        if (BDebug.DEBUG) {
+                            e.printStackTrace();
+                        }
                         return;
                     }
 
@@ -299,24 +255,41 @@ public class EUExUploaderMgr extends EUExBase {
 
             final UploadPercentage uploadPercentage = new UploadPercentage();
 
+            final int finalCallbackId = callbackId;
             new Thread("SoTowerMobile-uexUpload") {
                 public void run() {
                     Uploader(formFile, uploadPercentage,
-                            Integer.parseInt(inOpCode), inInputName);
+                            Integer.parseInt(inOpCode), inInputName, finalCallbackId);
                 }
             }.start();
         } catch (Exception e) {
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + 0 + "," + 0 + "," + "null,"
-                    + EUExCallback.F_C_UpLoadError + ")}";
-            onCallback(js);
-            e.printStackTrace();
+            callBackStatus(inOpCode, 0, 0, "null", 2, callbackId);
+            if (BDebug.DEBUG) {
+                e.printStackTrace();
+            }
         }
     }
 
+    /**
+     * 回调上传进度
+     */
+    private void callBackStatus(String inOpCode, int packageSize, int percent, String responseString, int status,
+                                int callbackId) {
+        if (callbackId == -1) {
+            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
+                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
+                    + "," + packageSize + "," + percent + ",'" + responseString + "'," + status +
+                    ")}";
+            onCallback(js);
+        } else {
+            boolean hasNext = (status == EUExCallback.F_C_UpLoading);
+            callbackToJs(callbackId, hasNext, packageSize, percent, responseString, status);
+        }
+    }
+
+
     private String Uploader(EUExFormFile formFile,
-            UploadPercentage uploadPercentage, int inOpCode, String inInputName) {
+                            UploadPercentage uploadPercentage, int inOpCode, String inInputName, int callbackId) {
 
         InputStream fileIs = null;
         DataOutputStream outStream = null;
@@ -326,12 +299,8 @@ public class EUExUploaderMgr extends EUExBase {
 
             if (formFile != null) {
                 if (formFile.m_inputStream == null) {
-                    String js = SCRIPT_HEADER + "if("
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                            + "," + 0 + "," + 0 + "," + "null,"
-                            + EUExCallback.F_C_UpLoadError + ")}";
-                    onCallback(js);
+                    callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
+                            .F_C_UpLoadError, callbackId);
                     return null;
                 }
                 if (inInputName == null || inInputName.length() == 0) {
@@ -340,34 +309,34 @@ public class EUExUploaderMgr extends EUExBase {
                 String BOUNDARY = UUID.randomUUID().toString(); // 边界标识 随机生成
                 String PREFIX = "--", LINE_END = "\r\n";
                 String CONTENT_TYPE = "multipart/form-data"; // 内容类型
+                String tail=LINE_END+PREFIX + BOUNDARY + PREFIX + LINE_END;
 
                 URL url = new URL(formFile.getM_targetAddress());
-				if (formFile.getM_targetAddress().startsWith(
-						BUtility.F_HTTP_PATH)) {
-					conn = (HttpURLConnection) url.openConnection();
-				} else {
-					conn = (HttpsURLConnection) url.openConnection();
-					javax.net.ssl.SSLSocketFactory ssFact = null;
-					if (mHasCert) {
-						ssFact = Http.getSSLSocketFactoryWithCert(mCertPassword,
-								mCertPath, mContext);
-					} else {
-						ssFact = new HNetSSLSocketFactory(null, null);
-					}
-					((HttpsURLConnection) conn).setSSLSocketFactory(ssFact);
-					((HttpsURLConnection) conn)
-							.setHostnameVerifier(new HX509HostnameVerifier());
-				}
+                if (formFile.getM_targetAddress().startsWith(
+                        BUtility.F_HTTP_PATH)) {
+                    conn = (HttpURLConnection) url.openConnection();
+                } else {
+                    conn = (HttpsURLConnection) url.openConnection();
+                    javax.net.ssl.SSLSocketFactory ssFact = null;
+                    if (mHasCert) {
+                        ssFact = Http.getSSLSocketFactoryWithCert(mCertPassword,
+                                mCertPath, mContext);
+                    } else {
+                        ssFact = new HNetSSLSocketFactory(null, null);
+                    }
+                    ((HttpsURLConnection) conn).setSSLSocketFactory(ssFact);
+                    ((HttpsURLConnection) conn)
+                            .setHostnameVerifier(new HX509HostnameVerifier());
+                }
                 String cookie = getCookie(formFile.getM_targetAddress());
                 if (null != cookie) {
                     conn.setRequestProperty("Cookie", cookie);
                 }
-
-                conn.setReadTimeout(TIME_OUT);
+                 conn.setReadTimeout(TIME_OUT);
                 conn.setConnectTimeout(TIME_OUT);
                 conn.setDoInput(true); // 允许输入流
                 conn.setDoOutput(true); // 允许输出流
-                conn.setChunkedStreamingMode(4096);
+//                conn.setChunkedStreamingMode(4096); //Http 1.0 服务器不支持这种模式
                 conn.setUseCaches(false); // 不允许使用缓存
                 conn.setRequestMethod("POST"); // 请求方式
                 conn.setRequestProperty("Charset", CHARSET); // 设置编码
@@ -375,19 +344,15 @@ public class EUExUploaderMgr extends EUExBase {
                 conn.setRequestProperty("Content-Type", CONTENT_TYPE
                         + ";boundary=" + BOUNDARY);
                 addHeaders(conn);
-				
-				if (null != mCurWData) {
-					conn.setRequestProperty(
-							KEY_APPVERIFY,
-							getAppVerifyValue(mCurWData,
-									System.currentTimeMillis()));
-					conn.setRequestProperty(XMAS_APPID,mCurWData.m_appId);
-				}
-				/**
-                 * 当文件不为空，把文件包装并且上传
-                 */
-                DataOutputStream dos = new DataOutputStream(
-                        conn.getOutputStream());
+
+                if (null != mCurWData) {
+                    conn.setRequestProperty(
+                            KEY_APPVERIFY,
+                            getAppVerifyValue(mCurWData,
+                                    System.currentTimeMillis()));
+                    conn.setRequestProperty(XMAS_APPID, mCurWData.m_appId);
+                }
+
                 StringBuffer sb = new StringBuffer();
                 sb.append(PREFIX);
                 sb.append(BOUNDARY);
@@ -403,12 +368,21 @@ public class EUExUploaderMgr extends EUExBase {
                 sb.append("Content-Type: application/octet-stream; charset="
                         + CHARSET + LINE_END);
                 sb.append(LINE_END);
-                dos.write(sb.toString().getBytes());
+                String stringData=sb.toString();
                 fileIs = formFile.m_inputStream;
                 // int l;
                 int upload = 0;
                 int fileSize = fileIs.available();
-                uploadPercentage.setFileSize(fileSize, inOpCode);
+                long requestLength=stringData.getBytes().length+tail.length()+fileSize;
+                conn.setRequestProperty("Content-length",requestLength+"");
+                conn.setFixedLengthStreamingMode((int)requestLength);
+
+
+                DataOutputStream dos = new DataOutputStream(
+                        conn.getOutputStream());
+                dos.write(sb.toString().getBytes());
+                fileIs = formFile.m_inputStream;
+                uploadPercentage.setFileSize(fileSize, inOpCode, callbackId);
                 byte[] bytes = new byte[4096];
                 int len = 0;
                 try {
@@ -418,51 +392,24 @@ public class EUExUploaderMgr extends EUExBase {
                         uploadPercentage.sendMessage(upload);
                     }
                 } catch (OutOfMemoryError e) {
-                    String js = SCRIPT_HEADER + "if("
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                            + "," + 0 + "," + 0 + "," + "null,"
-                            + EUExCallback.F_C_UpLoadError + ")}";
-                    onCallback(js);
+                    callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback.F_C_UpLoadError, callbackId);
                     return null;
                 }
 
-                dos.write(LINE_END.getBytes());
-                byte[] end_data = (PREFIX + BOUNDARY + PREFIX + LINE_END)
-                        .getBytes();
+                byte[] end_data = tail.getBytes();
                 dos.write(end_data);
-
+                dos.flush();
                 int res = conn.getResponseCode();
                 if (res == 200) {
-                    String js = SCRIPT_HEADER + "if("
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                            + "," + uploadPercentage.fileSize + "," + 100 + ","
-                            + "null," + EUExCallback.F_C_UpLoading + ")}";
-                    onCallback(js);
-                    InputStreamReader isReader = new InputStreamReader(  
-                            conn.getInputStream(),CHARSET);
-                    BufferedReader bufReader = new BufferedReader(isReader);
-                    StringBuffer buffer = new StringBuffer();
-                    String line = " ";
-                    while ((line = bufReader.readLine()) != null){
-                        buffer.append(line);
-                    }
-
-                    js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                            + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "("
-                            + inOpCode + "," + uploadPercentage.fileSize + ","
-                            + 100 + ",'" + buffer.toString()
-                            + "'," + EUExCallback.F_C_FinishUpLoad + ")}";
-                    onCallback(js);
+                    callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, "null", EUExCallback.F_C_UpLoading, callbackId);
+                    byte[] bResult = toByteArray(conn);
+                    String result = BUtility.transcoding(new String(bResult, "UTF-8"));
+                    callBackStatus(String.valueOf(inOpCode), uploadPercentage.fileSize, 100, result, EUExCallback
+                            .F_C_FinishUpLoad, callbackId);
 
                 } else {
-                    String js = SCRIPT_HEADER + "if("
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "){"
-                            + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                            + "," + 0 + "," + 0 + "," + "null,"
-                            + EUExCallback.F_C_UpLoadError + ")}";
-                    onCallback(js);
+                    callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
+                            .F_C_UpLoadError, callbackId);
                 }
 
                 fileIs.close();
@@ -472,19 +419,17 @@ public class EUExUploaderMgr extends EUExBase {
             }
 
         } catch (MalformedURLException e) {
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + 0 + "," + 0 + "," + "null,"
-                    + EUExCallback.F_C_UpLoadError + ")}";
-            onCallback(js);
-            e.printStackTrace();
+            callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
+                    .F_C_UpLoadError, callbackId);
+            if (BDebug.DEBUG) {
+                e.printStackTrace();
+            }
         } catch (Exception e) {
-            String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                    + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + inOpCode
-                    + "," + 0 + "," + 0 + "," + "null,"
-                    + EUExCallback.F_C_UpLoadError + ")}";
-            onCallback(js);
-            e.printStackTrace();
+            callBackStatus(String.valueOf(inOpCode), 0, 0, "null", EUExCallback
+                    .F_C_UpLoadError, callbackId);
+            if (BDebug.DEBUG) {
+                e.printStackTrace();
+            }
         } finally {
 
             try {
@@ -497,8 +442,13 @@ public class EUExUploaderMgr extends EUExBase {
                 if (conn != null) {
                     conn.disconnect();
                 }
+                if (mInputStream != null) {
+                    mInputStream.close();
+                }
             } catch (IOException e) {
-                e.printStackTrace();
+                if (BDebug.DEBUG) {
+                    e.printStackTrace();
+                }
             }
             fileIs = null;
             outStream = null;
@@ -507,7 +457,30 @@ public class EUExUploaderMgr extends EUExBase {
 
         return null;
     }
-    
+
+    private byte[] toByteArray(HttpURLConnection conn) throws Exception {
+        if (null == conn) {
+            return new byte[]{};
+        }
+        mInputStream = conn.getInputStream();
+        if (mInputStream == null) {
+            return new byte[]{};
+        }
+        long len = conn.getContentLength();
+        if (len > Integer.MAX_VALUE) {
+            throw new Exception(
+                    "HTTP entity too large to be buffered in memory");
+        }
+        String contentEncoding = conn.getContentEncoding();
+        if (null != contentEncoding) {
+            if ("gzip".equalsIgnoreCase(contentEncoding)) {
+                mInputStream = new GZIPInputStream(mInputStream, 2048);
+            }
+        }
+        return IOUtils.toByteArray(mInputStream);
+    }
+
+
     private void addHeaders(HttpURLConnection mConnection) {
         if (null != mConnection) {
             Set<Entry<String, String>> entrys = mHttpHead.entrySet();
@@ -523,14 +496,16 @@ public class EUExUploaderMgr extends EUExBase {
         String uploadPercentage = null;
         String callBack = null;
         DecimalFormat df = new DecimalFormat();
+        int callbackId = -1;
 
-        public void setFileSize(int inFileSize, int inOpCode) {
+        public void setFileSize(int inFileSize, int inOpCode, int callbackId) {
             fileSize = inFileSize;
             df.setMaximumFractionDigits(2);
             df.setMinimumFractionDigits(0);
             opCode = inOpCode;
+            this.callbackId = callbackId;
         }
-        
+
         public void sendMessage(int msg) {
             String percentage = "0";
             if (fileSize * 100 < 0) {
@@ -538,130 +513,141 @@ public class EUExUploaderMgr extends EUExBase {
             } else {
                 percentage = df.format(msg * 100 / fileSize);
             }
-            if(!percentage.equals(lastPercenttage)
-                    || TextUtils.isEmpty(lastPercenttage))
-            {
-                String js = SCRIPT_HEADER + "if(" + F_CALLBACK_NAME_UPLOADSTATUS
-                        + "){" + F_CALLBACK_NAME_UPLOADSTATUS + "(" + opCode + ","
-                        + fileSize + "," + percentage + "," + "null,"
-                        + EUExCallback.F_C_UpLoading + ")}";
-                onCallback(js);
-            }
-
-        }
-    }
-    
-    public void setHeaders(String[] params) {
-        if (params.length < 2 || null == params) {
-            return;
-        }
-        String opCode = params[0];
-        String headJson = params[1];
-        if(objectMap.get(Integer.parseInt(opCode)) != null) {
-            try {
-                JSONObject json = new JSONObject(headJson);
-                Iterator<?> keys = json.keys();
-                while (keys.hasNext()) {
-                    String key = (String) keys.next();
-                    String value = json.getString(key);
-                    mHttpHead.put(key, value);
+            long currentTime = System.currentTimeMillis();
+            if (!percentage.equals(lastPercenttage) &&
+                    ((currentTime - lastPercentTime) > 200//进度回调间隔为200ms,或者进度为100也进行回调
+                            || "100".equals(percentage))) {
+                    lastPercenttage = percentage;
+                    lastPercentTime = currentTime;
+                    callBackStatus(String.valueOf(opCode), fileSize, Integer.parseInt(percentage), "null", EUExCallback
+                            .F_C_UpLoading, callbackId);
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
+
             }
-        
         }
-    }
 
-    @Override
-    protected boolean clean() {
-        return false;
-    }
-
-    private InputStream compress(Context m_eContext, String path, int compress,
-            float with) throws OutOfMemoryError, IOException {
-        FileDescriptor fileDescriptor = null;
-        boolean isRes = false;
-        if (!path.startsWith("/")) {
-            AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
-                    .openFd(path);
-            fileDescriptor = assetFileDescriptor.getFileDescriptor();
-            isRes = true;
-        } else {
-            FileInputStream fis = new FileInputStream(new File(path));
-            fileDescriptor = fis.getFD();
-        }
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inJustDecodeBounds = true;
-        Bitmap source = BitmapFactory.decodeFileDescriptor(fileDescriptor,
-                null, options);
-        if (options.outHeight <= 0 || options.outWidth <= 0) {
-            if (isRes) {
-                return m_eContext.getAssets().open(path);
-            } else {
-                return new FileInputStream(new File(path));
+        public boolean setHeaders(String[] params) {
+            if (params.length < 2 || null == params) {
+                return false;
             }
-
-        }
-
-        int quality = 0;
-        if (compress == 1) {
-            quality = 100;
-        } else if (compress == 2) {
-            quality = 75;
-        } else if (compress == 3) {
-            quality = 50;
-        } else {
-            quality = 25;
-        }
-
-        float max = with == -1 ? 640 : with;
-        float src_w = options.outWidth;
-        float scaleRate = 1;
-
-        scaleRate = src_w / max;
-
-        scaleRate = scaleRate > 1 ? scaleRate : 1;
-
-        if (scaleRate != 1) {
-            Bitmap dstbmp = null;
-            ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
-            options.inSampleSize = (int) scaleRate;
-            options.inJustDecodeBounds = false;
-            options.inInputShareable = true;
-            options.inPurgeable = true;
-            options.inPreferredConfig = Config.RGB_565;// 会失真，缩略图失真没事^_^
-
-            source = BitmapFactory.decodeFileDescriptor(fileDescriptor, null,
-                    options);
-            if (source != null) {
-                int srcWidth = source.getWidth();
-                int srcHeight = source.getHeight();
-                final float sacleRate = max / (float) srcWidth;
-                if (sacleRate != 1) {
-                	final int destWidth = (int) (srcWidth * sacleRate);
-                	final int destHeight = (int) (srcHeight * sacleRate);
-                	dstbmp = Bitmap.createScaledBitmap(source, destWidth,
-                			destHeight, false);
-                	if (source != null && !source.isRecycled()) {
-                		source.recycle();
-                	}
-                } else {
-                	dstbmp = source;
-                }
-                if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
-                    if (dstbmp != null && !dstbmp.isRecycled()) {
-                        dstbmp.recycle();
+            String opCode = params[0];
+            String headJson = params[1];
+            if (objectMap.get(Integer.parseInt(opCode)) != null) {
+                try {
+                    JSONObject json = new JSONObject(headJson);
+                    Iterator<?> keys = json.keys();
+                    while (keys.hasNext()) {
+                        String key = (String) keys.next();
+                        String value = json.getString(key);
+                        mHttpHead.put(key, value);
                     }
-                    return new ByteArrayInputStream(baos.toByteArray());
+                } catch (Exception e) {
+                    if (BDebug.DEBUG) {
+                        e.printStackTrace();
+                    }
+                }
+
+            }
+            return true;
+        }
+
+        @Override
+        protected boolean clean() {
+            return false;
+        }
+
+        private InputStream compress(Context m_eContext, String path, int compress,
+                                     float with) throws OutOfMemoryError, IOException {
+            FileDescriptor fileDescriptor = null;
+            boolean isRes = false;
+            if (!path.startsWith("/")) {
+                AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
+                        .openFd(path);
+                fileDescriptor = assetFileDescriptor.getFileDescriptor();
+                isRes = true;
+            } else {
+                FileInputStream fis = new FileInputStream(new File(path));
+                fileDescriptor = fis.getFD();
+            }
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            Bitmap source = BitmapFactory.decodeFileDescriptor(fileDescriptor,
+                    null, options);
+            if (options.outHeight <= 0 || options.outWidth <= 0) {
+                if (isRes) {
+                    return m_eContext.getAssets().open(path);
                 } else {
-                    baos.close();
+                    return new FileInputStream(new File(path));
+                }
+
+            }
+
+            int quality = 0;
+            if (compress == 1) {
+                quality = 100;
+            } else if (compress == 2) {
+                quality = 75;
+            } else if (compress == 3) {
+                quality = 50;
+            } else {
+                quality = 25;
+            }
+
+            float max = with == -1 ? 640 : with;
+            float src_w = options.outWidth;
+            float scaleRate = 1;
+
+            scaleRate = src_w / max;
+
+            scaleRate = scaleRate > 1 ? scaleRate : 1;
+
+            if (scaleRate != 1) {
+                Bitmap dstbmp = null;
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(4096);
+                options.inSampleSize = (int) scaleRate;
+                options.inJustDecodeBounds = false;
+                options.inInputShareable = true;
+                options.inPurgeable = true;
+                options.inPreferredConfig = Config.RGB_565;// 会失真，缩略图失真没事^_^
+
+                source = BitmapFactory.decodeFileDescriptor(fileDescriptor, null,
+                        options);
+                if (source != null) {
+                    int srcWidth = source.getWidth();
+                    int srcHeight = source.getHeight();
+                    final float sacleRate = max / (float) srcWidth;
+                    if (sacleRate != 1) {
+                        final int destWidth = (int) (srcWidth * sacleRate);
+                        final int destHeight = (int) (srcHeight * sacleRate);
+                        dstbmp = Bitmap.createScaledBitmap(source, destWidth,
+                                destHeight, false);
+                        if (source != null && !source.isRecycled()) {
+                            source.recycle();
+                        }
+                    } else {
+                        dstbmp = source;
+                    }
+                    if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
+                        if (dstbmp != null && !dstbmp.isRecycled()) {
+                            dstbmp.recycle();
+                        }
+                        return new ByteArrayInputStream(baos.toByteArray());
+                    } else {
+                        baos.close();
+                        if (isRes) {
+                            return m_eContext.getAssets().open(path);
+                        } else {
+                            return new FileInputStream(new File(path));
+                        }
+                    }
+                } else {
                     if (isRes) {
                         return m_eContext.getAssets().open(path);
                     } else {
                         return new FileInputStream(new File(path));
                     }
                 }
+
             } else {
                 if (isRes) {
                     return m_eContext.getAssets().open(path);
@@ -670,90 +656,71 @@ public class EUExUploaderMgr extends EUExBase {
                 }
             }
 
-        } else {
-            if (isRes) {
-                return m_eContext.getAssets().open(path);
-            } else {
-                return new FileInputStream(new File(path));
+        }
+
+        @Override
+        public void onHandleMessage(Message msg) {
+
+        }
+
+        /**
+         * 添加验证头
+         *
+         * @param curWData  当前widgetData
+         * @param timeStamp 当前时间戳
+         * @return
+         */
+        private String getAppVerifyValue(WWidgetData curWData, long timeStamp) {
+            String value = null;
+            String md5 = getMD5Code(curWData.m_appId + ":" + curWData.m_appkey
+                    + ":" + timeStamp);
+            value = "md5=" + md5 + ";ts=" + timeStamp;
+            return value;
+
+        }
+
+        private String getMD5Code(String value) {
+            if (value == null) {
+                value = "";
             }
+            try {
+                MessageDigest md = MessageDigest.getInstance("MD5");
+                md.reset();
+                md.update(value.getBytes());
+                byte[] md5Bytes = md.digest();
+                StringBuffer hexValue = new StringBuffer();
+                for (int i = 0; i < md5Bytes.length; i++) {
+                    int val = ((int) md5Bytes[i]) & 0xff;
+                    if (val < 16)
+                        hexValue.append("0");
+                    hexValue.append(Integer.toHexString(val));
+                }
+                return hexValue.toString();
+            } catch (NoSuchAlgorithmException e) {
+                if (BDebug.DEBUG) {
+                    e.printStackTrace();
+                }
+            }
+
+            return null;
+        }
+
+        /**
+         * plugin里面的子应用的appId和appkey都按照主应用为准
+         */
+        private WWidgetData getWidgetData(EBrowserView view) {
+            WWidgetData widgetData = view.getCurrentWidget();
+            if (widgetData == null) {
+                widgetData = WDataManager.sRootWgt;
+            }
+            String indexUrl = widgetData.m_indexUrl;
+            Log.i("uexUploaderMgr", "m_indexUrl:" + indexUrl);
+            if (widgetData.m_wgtType != 0) {
+                if (indexUrl.contains("widget/plugin")) {
+                    return view.getRootWidget();
+                }
+            }
+            return widgetData;
         }
 
     }
-
-    @Override
-    public void onHandleMessage(Message msg) {
-        if(msg == null){
-            return;
-        }
-        String[] params = msg.getData().getStringArray(TAG_PARAMS_DATA);
-        switch (msg.what) {
-        case TAG_MSG_CREATE:
-            createUploaderMsg(params);
-            break;
-        case TAG_MSG_UPLOAD:
-            uploadFileMsg(params);
-            break;
-        case TAG_MSG_CLOSE:
-            closeUploaderMsg(params);
-        default:
-            break;
-        }
-    }
-    
-	/**
-	 * 添加验证头
-	 * 
-	 * @param curWData
-	 *            当前widgetData
-	 * @param timeStamp
-	 *            当前时间戳
-	 * @return
-	 */
-	private String getAppVerifyValue(WWidgetData curWData, long timeStamp) {
-		String value = null;
-		String md5 = getMD5Code(curWData.m_appId + ":" + curWData.m_appkey
-				+ ":" + timeStamp);
-		value = "md5=" + md5 + ";ts=" + timeStamp;
-		return value;
-
-	}
-
-	private String getMD5Code(String value) {
-		if (value == null) {
-			value = "";
-		}
-		try {
-			MessageDigest md = MessageDigest.getInstance("MD5");
-			md.reset();
-			md.update(value.getBytes());
-			byte[] md5Bytes = md.digest();
-			StringBuffer hexValue = new StringBuffer();
-			for (int i = 0; i < md5Bytes.length; i++) {
-				int val = ((int) md5Bytes[i]) & 0xff;
-				if (val < 16)
-					hexValue.append("0");
-				hexValue.append(Integer.toHexString(val));
-			}
-			return hexValue.toString();
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		}
-
-		return null;
-	}
-	/**
-	 * plugin里面的子应用的appId和appkey都按照主应用为准
-	 */
-	private WWidgetData getWidgetData(EBrowserView view){
-		WWidgetData widgetData = view.getCurrentWidget();
-		String indexUrl=widgetData.m_indexUrl;
-		Log.i("uexUploaderMgr", "m_indexUrl:"+indexUrl);
-		if(widgetData.m_wgtType!=0){
-			if(indexUrl.contains("widget/plugin")){
-				return view.getRootWidget();
-			}
-		}
-		return widgetData;
-	}
-
-}
