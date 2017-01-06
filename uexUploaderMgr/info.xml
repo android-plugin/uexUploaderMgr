@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
     <plugin uexName="uexUploaderMgr" version="4.0.3" build = "3">
-        <info>3：修复服务器返回2XX（非200、206）导致上传失败的问题，并修改自动处理重定向</info>
+        <info>3：修复服务器返回2XX（非200）导致上传失败的问题，并修改自动处理重定向</info>
         <build>2：修复文件名有汉字时出错的问题</build>
         <build>1：修复uploadFile压缩参数失效的问题</build>
         <build>0：4.0</build>
