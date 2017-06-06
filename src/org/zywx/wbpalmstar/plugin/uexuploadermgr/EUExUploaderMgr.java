@@ -221,7 +221,6 @@ public class EUExUploaderMgr extends EUExBase {
                 } else {
                     inputSteam = new FileInputStream(file);
                 }
-
                 formFile.setInputStream(inputSteam);
                 formFile.m_filname = file.getName();
             } else {
@@ -561,13 +560,18 @@ public class EUExUploaderMgr extends EUExBase {
                                      float with) throws OutOfMemoryError, IOException {
             FileDescriptor fileDescriptor = null;
             boolean isRes = false;
+            int fileSize;
+            int maxCompressSize;
             if (!path.startsWith("/")) {
                 AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
                         .openFd(path);
+                fileSize = (int)assetFileDescriptor.getLength();
                 fileDescriptor = assetFileDescriptor.getFileDescriptor();
                 isRes = true;
             } else {
                 FileInputStream fis = new FileInputStream(new File(path));
+
+                fileSize = fis.available();
                 fileDescriptor = fis.getFD();
             }
             BitmapFactory.Options options = new BitmapFactory.Options();
@@ -582,16 +586,19 @@ public class EUExUploaderMgr extends EUExBase {
                 }
 
             }
-
             int quality = 0;
             if (compress == 1) {
                 quality = 100;
+                maxCompressSize = (int)(fileSize * 0.8);
             } else if (compress == 2) {
                 quality = 75;
+                maxCompressSize = (int)(fileSize * 0.6);
             } else if (compress == 3) {
                 quality = 50;
+                maxCompressSize = (int)(fileSize * 0.4);
             } else {
                 quality = 25;
+                maxCompressSize = (int)(fileSize * 0.2);
             }
 
             float max = with == -1 ? 640 : with;
@@ -629,6 +636,13 @@ public class EUExUploaderMgr extends EUExBase {
                         dstbmp = source;
                     }
                     if (dstbmp.compress(CompressFormat.JPEG, quality, baos)) {
+                        while (baos.toByteArray().length > maxCompressSize && quality > 0) {
+                            // Clean up baos
+                            baos.reset();
+                            // interval 10
+                            quality -= 10;
+                            dstbmp.compress(Bitmap.CompressFormat.JPEG, quality, baos);
+                        }
                         if (dstbmp != null && !dstbmp.isRecycled()) {
                             dstbmp.recycle();
                         }
