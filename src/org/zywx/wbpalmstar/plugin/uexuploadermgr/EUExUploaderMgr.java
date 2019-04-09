@@ -369,7 +369,7 @@ public class EUExUploaderMgr extends EUExBase {
                 String stringData = sb.toString();
                 fileIs = formFile.m_inputStream;
                 // int l;
-                double upload = 0;
+                long upload = 0;
                 int fileSize = fileIs.available();
                 long requestLength = stringData.getBytes().length + tail.length() + fileSize;
                 conn.setRequestProperty("Content-length", requestLength + "");
@@ -503,7 +503,7 @@ public class EUExUploaderMgr extends EUExBase {
             this.callbackId = callbackId;
         }
 
-        public void sendMessage(double msg) {
+        public void sendMessage(long msg) {
             String percentage = "0";
             if (fileSize * 100 < 0) {
                 percentage = df.format(msg / (fileSize / 100));
