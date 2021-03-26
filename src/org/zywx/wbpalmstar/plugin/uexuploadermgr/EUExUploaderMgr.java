@@ -18,8 +18,6 @@ import org.zywx.wbpalmstar.engine.DataHelper;
 import org.zywx.wbpalmstar.engine.EBrowserView;
 import org.zywx.wbpalmstar.engine.universalex.EUExBase;
 import org.zywx.wbpalmstar.engine.universalex.EUExCallback;
-import org.zywx.wbpalmstar.platform.certificates.HNetSSLSocketFactory;
-import org.zywx.wbpalmstar.platform.certificates.HX509HostnameVerifier;
 import org.zywx.wbpalmstar.platform.certificates.Http;
 import org.zywx.wbpalmstar.plugin.uexuploadermgr.vo.CreateVO;
 import org.zywx.wbpalmstar.widgetone.dataservice.WDataManager;
@@ -46,8 +44,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.UUID;
 import java.util.zip.GZIPInputStream;
-
-import javax.net.ssl.HttpsURLConnection;
 
 public class EUExUploaderMgr extends EUExBase {
 
@@ -313,17 +309,11 @@ public class EUExUploaderMgr extends EUExBase {
                         BUtility.F_HTTP_PATH)) {
                     conn = (HttpURLConnection) url.openConnection();
                 } else {
-                    conn = (HttpsURLConnection) url.openConnection();
-                    javax.net.ssl.SSLSocketFactory ssFact = null;
                     if (mHasCert) {
-                        ssFact = Http.getSSLSocketFactoryWithCert(mCertPassword,
-                                mCertPath, mContext);
+                        conn = Http.getHttpsURLConnectionWithCert(url, mCertPassword, mCertPath, mContext);
                     } else {
-                        ssFact = new HNetSSLSocketFactory(null, null);
+                        conn = Http.getHttpsURLConnection(url);
                     }
-                    ((HttpsURLConnection) conn).setSSLSocketFactory(ssFact);
-                    ((HttpsURLConnection) conn)
-                            .setHostnameVerifier(new HX509HostnameVerifier());
                 }
                 String cookie = getCookie(formFile.getM_targetAddress());
                 if (null != cookie) {
