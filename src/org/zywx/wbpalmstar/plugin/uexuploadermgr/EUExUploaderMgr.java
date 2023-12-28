@@ -189,9 +189,9 @@ public class EUExUploaderMgr extends EUExBase {
         }
         try {
 
-            if (inFilePath.startsWith("/")) {
+            if (inFilePath.startsWith("/") || inFilePath.startsWith("content://")) {
                 File file = new File(inFilePath);
-                if (!file.exists()) {
+                if (inFilePath.startsWith("/") && !file.exists()) {
                     callBackStatus(inOpCode, 0, 0, "file上传文件不存在", EUExCallback.F_C_UpLoadError, callbackId);
                     return;
                 }
@@ -215,7 +215,7 @@ public class EUExUploaderMgr extends EUExBase {
                     }
 
                 } else {
-                    inputSteam = new FileInputStream(file);
+                    inputSteam = ACFileInputStreamFactory.create(mContext, inFilePath);
                 }
                 formFile.setInputStream(inputSteam);
                 formFile.m_filname = file.getName();
@@ -556,7 +556,7 @@ public class EUExUploaderMgr extends EUExBase {
             fileDescriptor = assetFileDescriptor.getFileDescriptor();
             isRes = true;
         } else {
-            FileInputStream fis = new FileInputStream(new File(path));
+            FileInputStream fis = ACFileInputStreamFactory.create(mContext, path);
 
             fileSize = fis.available();
             fileDescriptor = fis.getFD();
@@ -569,7 +569,7 @@ public class EUExUploaderMgr extends EUExBase {
             if (isRes) {
                 return m_eContext.getAssets().open(path);
             } else {
-                return new FileInputStream(new File(path));
+                return ACFileInputStreamFactory.create(mContext, path);
             }
 
         }
@@ -639,14 +639,14 @@ public class EUExUploaderMgr extends EUExBase {
                     if (isRes) {
                         return m_eContext.getAssets().open(path);
                     } else {
-                        return new FileInputStream(new File(path));
+                        return ACFileInputStreamFactory.create(mContext, path);
                     }
                 }
             } else {
                 if (isRes) {
                     return m_eContext.getAssets().open(path);
                 } else {
-                    return new FileInputStream(new File(path));
+                    return ACFileInputStreamFactory.create(mContext, path);
                 }
             }
 
@@ -654,7 +654,7 @@ public class EUExUploaderMgr extends EUExBase {
             if (isRes) {
                 return m_eContext.getAssets().open(path);
             } else {
-                return new FileInputStream(new File(path));
+                return ACFileInputStreamFactory.create(mContext, path);
             }
         }
 
