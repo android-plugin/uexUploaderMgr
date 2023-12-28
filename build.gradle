@@ -30,10 +30,10 @@ android {
         exclude 'META-INF/LICENSE.txt'
         exclude 'META-INF/NOTICE.txt'
     }
-    compileSdkVersion 28
+    compileSdkVersion 30
     defaultConfig {
         minSdkVersion 22
-        targetSdkVersion 28
+        targetSdkVersion 30
         applicationId 'org.zywx.wbpalmstar.widgetone.uexuploadermgr'
         multiDexEnabled true
     }
