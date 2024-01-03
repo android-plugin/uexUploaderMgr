@@ -546,10 +546,11 @@ public class EUExUploaderMgr extends EUExBase {
     private InputStream compress(Context m_eContext, String path, int compress,
                                  float with) throws OutOfMemoryError, IOException {
         FileDescriptor fileDescriptor = null;
+        // 记录开关判断是否为assets中的资源
         boolean isRes = false;
         int fileSize;
         int maxCompressSize;
-        if (!path.startsWith("/")) {
+        if (!path.startsWith("/") && !path.startsWith("content://")) {
             AssetFileDescriptor assetFileDescriptor = m_eContext.getAssets()
                     .openFd(path);
             fileSize = (int) assetFileDescriptor.getLength();
