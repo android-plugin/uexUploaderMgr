@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <uexplugins>
-    <plugin uexName="uexUploaderMgr" version="4.6.8" build = "2023122801">
-        <info>8: 适配4.6，4.7新引擎，使用Provider处理文件</info>
+    <plugin uexName="uexUploaderMgr" version="4.6.8.1" build = "2024010301">
+        <info>8.1: 适配4.6，4.7新引擎，使用Provider处理文件</info>
         <build>7: 适配新引擎，修复Http初始化错误</build>
         <build>6：修复文件上传文件较大时，上传进度回调异常</build>
         <build>4：修复图片压缩后文件变大的问题</build>
